@@ -7,6 +7,7 @@ import { RequireAdmin } from "./features/auth/RequireAdmin";
 import { LoginPage } from "./features/auth/LoginPage";
 import { AuthCallbackPage } from "./features/auth/AuthCallbackPage";
 import { ChatPage } from "./features/chat/ChatPage";
+import { AzureResourceCostsPage } from "./features/chat/AzureResourceCostsPage";
 import { PendingApprovalsPage } from "./features/approvals/PendingApprovalsPage";
 import { ApprovedApprovalsPage } from "./features/approvals/ApprovedApprovalsPage";
 import { FailedApprovalsPage } from "./features/approvals/FailedApprovalsPage";
@@ -33,6 +34,7 @@ export default function App() {
       >
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
+        <Route path="/costs" element={<AzureResourceCostsPage />} />
         <Route path="/approvals" element={<Navigate to="/approvals/pending" replace />} />
         <Route path="/approvals/pending" element={<MyPendingApprovalsPage />} />
         <Route path="/approvals/approved" element={<MyApprovedApprovalsPage />} />
