@@ -175,9 +175,9 @@ export function LoginPage() {
           <button type="button" className="landing-btn landing-btn--primary" onClick={signIn} disabled={status === "loading" || !isRealEntraConfigured}>
             {ctaLabel}
           </button>
-          <a className="landing-btn landing-btn--ghost" href="#how">
+          <Link className="landing-btn landing-btn--ghost" to="/demo">
             Watch 2-min demo -&gt;
-          </a>
+          </Link>
         </div>
         {loginError ? <p className="landing-warning landing-reveal">{loginError}</p> : null}
         {!isRealEntraConfigured ? (

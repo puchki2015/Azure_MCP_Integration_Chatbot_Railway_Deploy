@@ -8,6 +8,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { AuthCallbackPage } from "./features/auth/AuthCallbackPage";
 import { ChatPage } from "./features/chat/ChatPage";
 import { AzureResourceCostsPage } from "./features/chat/AzureResourceCostsPage";
+import { PromoVideoPage } from "./features/promo/PromoVideoPage";
 import { PendingApprovalsPage } from "./features/approvals/PendingApprovalsPage";
 import { ApprovedApprovalsPage } from "./features/approvals/ApprovedApprovalsPage";
 import { FailedApprovalsPage } from "./features/approvals/FailedApprovalsPage";
@@ -23,6 +24,7 @@ export default function App() {
       <Route element={<PublicLayout />}>
         <Route path="/" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/demo" element={<PromoVideoPage />} />
       </Route>
 
       <Route
