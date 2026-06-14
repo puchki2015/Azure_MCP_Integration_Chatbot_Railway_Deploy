@@ -20,6 +20,20 @@ const mockUser: AppUser = {
   isAdmin: true
 };
 
+function buildFallbackUser(account: {
+  homeAccountId?: string;
+  localAccountId?: string;
+  username?: string;
+  name?: string;
+}): AppUser {
+  return {
+    oid: account.homeAccountId ?? account.localAccountId ?? account.username ?? "unknown-account",
+    email: account.username ?? "unknown@example.com",
+    displayName: account.name ?? account.username ?? "Signed in user",
+    isAdmin: false
+  };
+}
+
 type AuthContextValue = AuthState & {
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -84,7 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         saveAuthStorage(accessToken);
       }
 
-      const apiUser = await fetchCurrentUser();
+      const fallbackUser = buildFallbackUser(account);
+      setState({
+        status: "authenticated",
+        user: fallbackUser,
+        accessToken
+      });
+
+      const apiUser = await fetchCurrentUser().catch(() => fallbackUser);
       setState({
         status: "authenticated",
         user: apiUser,
@@ -173,7 +194,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     saveAuthStorage(tokenResult.accessToken);
 
-    const apiUser = await fetchCurrentUser();
+    const fallbackUser = buildFallbackUser(activeAccount);
+    setState({
+      status: "authenticated",
+      user: fallbackUser,
+      accessToken: tokenResult.accessToken
+    });
+
+    const apiUser = await fetchCurrentUser().catch(() => fallbackUser);
     setState({
       status: "authenticated",
       user: apiUser,
