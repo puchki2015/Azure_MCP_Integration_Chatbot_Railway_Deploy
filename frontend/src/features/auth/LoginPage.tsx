@@ -172,9 +172,6 @@ export function LoginPage() {
           and manage resources through natural conversation - no CLI, no portal hunting.
         </p>
         <div className="landing-hero__actions landing-reveal">
-          <button type="button" className="landing-btn landing-btn--primary" onClick={signIn} disabled={status === "loading" || !isRealEntraConfigured}>
-            {ctaLabel}
-          </button>
           <Link className="landing-btn landing-btn--ghost" to="/demo">
             Watch 2-min demo -&gt;
           </Link>
@@ -410,9 +407,6 @@ export function LoginPage() {
           <p>Free for up to 2 subscriptions - No credit card required - SOC 2 Type II certified</p>
           <div className="landing-cta__row">
             <input className="landing-cta__email" type="email" placeholder="you@company.com" />
-            <button type="button" className="landing-btn landing-btn--primary landing-cta__button" onClick={signIn} disabled={status === "loading" || !isRealEntraConfigured}>
-              {ctaLabel}
-            </button>
           </div>
           <p className="landing-cta__footnote">Trusted by engineering teams at Contoso, Fabrikam, Northwind & 50,000+ others</p>
         </div>
