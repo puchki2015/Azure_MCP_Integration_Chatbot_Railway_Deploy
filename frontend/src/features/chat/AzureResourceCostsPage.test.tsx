@@ -6,12 +6,14 @@ const listCostEstimatesMock = vi.fn();
 const analyzeCostRequestMock = vi.fn();
 const resolveCostRequestMock = vi.fn();
 const refreshVmPricesMock = vi.fn();
+const listVmPricesMock = vi.fn();
 
 vi.mock("./costs.api", () => ({
   analyzeCostRequest: (...args: unknown[]) => analyzeCostRequestMock(...args),
   listCostEstimates: (...args: unknown[]) => listCostEstimatesMock(...args),
   resolveCostRequest: (...args: unknown[]) => resolveCostRequestMock(...args),
-  refreshVmPrices: (...args: unknown[]) => refreshVmPricesMock(...args)
+  refreshVmPrices: (...args: unknown[]) => refreshVmPricesMock(...args),
+  listVmPrices: (...args: unknown[]) => listVmPricesMock(...args)
 }));
 
 describe("AzureResourceCostsPage", () => {
@@ -20,6 +22,7 @@ describe("AzureResourceCostsPage", () => {
     analyzeCostRequestMock.mockReset();
     resolveCostRequestMock.mockReset();
     refreshVmPricesMock.mockReset();
+    listVmPricesMock.mockReset();
   });
 
   it("asks for confirmation before pricing and then saves the estimate after selection", async () => {
@@ -181,5 +184,66 @@ describe("AzureResourceCostsPage", () => {
 
     expect(screen.getByText(/Status SUCCESS/i)).toBeInTheDocument();
     expect(refreshVmPricesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists cached VM prices from the catalog tab", async () => {
+    listCostEstimatesMock.mockResolvedValueOnce([]);
+    listVmPricesMock.mockResolvedValueOnce([
+      {
+        lookup_key: {
+          id: 12,
+          service_name: "Virtual Machines",
+          arm_sku: "Standard_B4ms",
+          meter_name: "B4ms",
+          product_name: "Virtual Machines Bsv2 Series",
+          region: "eastus",
+          currency_code: "USD",
+          unit_of_measure: "1 Hour",
+          tier: "Standard",
+          normalized_key: "vm-key",
+          is_active: true,
+          last_checked_at: "2026-06-15T10:12:05Z",
+          last_refresh_at: "2026-06-15T10:12:05Z",
+          last_snapshot_id: 51
+        },
+        current_snapshot: {
+          id: 51,
+          lookup_key_id: 12,
+          source: "azure_retail_prices_api",
+          source_item_id: "vm-row-001",
+          sku_name: "Standard_B4ms",
+          product_name: "Virtual Machines Bsv2 Series",
+          meter_name: "B4ms",
+          region: "eastus",
+          currency_code: "USD",
+          unit_of_measure: "1 Hour",
+          price_type: "Consumption",
+          retail_price: 0.08,
+          unit_price: 0.08,
+          effective_start: null,
+          effective_end: null,
+          fetched_at: "2026-06-15T10:12:05Z",
+          valid_from: null,
+          valid_to: null,
+          is_current: true,
+          payload_hash: "hash-vm-snapshot",
+          raw_payload: {},
+          api_url: "https://prices.azure.com/api/retail/prices",
+          request_params: null
+        },
+        snapshot_count: 1
+      }
+    ]);
+
+    render(<AzureResourceCostsPage />);
+
+    expect(await screen.findByText(/No estimates yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("tab", { name: /VM catalog/i })[0]);
+
+    expect(await screen.findByRole("heading", { name: /Cached VM types in Postgres/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Standard_B4ms/i)).toBeInTheDocument();
+    expect(screen.getByText(/0.080000 \/ 1 Hour/i)).toBeInTheDocument();
+    expect(listVmPricesMock).toHaveBeenCalledTimes(1);
   });
 });

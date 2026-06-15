@@ -77,6 +77,55 @@ export type PriceRefreshRun = {
   refresh_metadata: Record<string, unknown> | null;
 };
 
+export type PricingLookupKey = {
+  id: number;
+  service_name: string;
+  arm_sku: string | null;
+  meter_name: string | null;
+  product_name: string | null;
+  region: string | null;
+  currency_code: string;
+  unit_of_measure: string | null;
+  tier: string | null;
+  normalized_key: string;
+  is_active: boolean;
+  last_checked_at: string | null;
+  last_refresh_at: string | null;
+  last_snapshot_id: number | null;
+};
+
+export type PricingSnapshot = {
+  id: number;
+  lookup_key_id: number;
+  source: string;
+  source_item_id: string | null;
+  sku_name: string | null;
+  product_name: string | null;
+  meter_name: string | null;
+  region: string | null;
+  currency_code: string;
+  unit_of_measure: string | null;
+  price_type: string | null;
+  retail_price: number;
+  unit_price: number;
+  effective_start: string | null;
+  effective_end: string | null;
+  fetched_at: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  is_current: boolean;
+  payload_hash: string;
+  raw_payload: Record<string, unknown>;
+  api_url: string;
+  request_params: Record<string, unknown> | null;
+};
+
+export type VmPriceOverview = {
+  lookup_key: PricingLookupKey;
+  current_snapshot: PricingSnapshot | null;
+  snapshot_count: number;
+};
+
 export type CostEstimateCreateRequest = {
   raw_input: string;
   normalized_request: Record<string, unknown>;

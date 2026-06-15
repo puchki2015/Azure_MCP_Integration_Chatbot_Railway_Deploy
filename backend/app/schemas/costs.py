@@ -194,3 +194,9 @@ class PriceRefreshRunResponse(BaseModel):
     keys_failed: int
     error_summary: str | None = None
     refresh_metadata: dict[str, Any] | None = None
+
+
+class VmPriceOverviewResponse(BaseModel):
+    lookup_key: PricingLookupKeyResponse
+    current_snapshot: PricingSnapshotResponse | None = None
+    snapshot_count: int = 0

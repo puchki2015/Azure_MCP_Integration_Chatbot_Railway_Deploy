@@ -25,6 +25,7 @@ from app.schemas.costs import PricingSnapshotIngestRequest
 from app.schemas.costs import PricingSnapshotResponse
 from app.schemas.costs import CostResolutionRequest
 from app.schemas.costs import CostResolutionResponse
+from app.schemas.costs import VmPriceOverviewResponse
 from app.services.price_cache_service import price_cache_service
 from app.services.cost_analysis_service import cost_analysis_service
 from app.services.cost_pricing_service import cost_pricing_service
@@ -58,6 +59,18 @@ def _estimate_to_response(
 
 def _refresh_run_to_response(run: PriceRefreshRun) -> PriceRefreshRunResponse:
     return PriceRefreshRunResponse.model_validate(run)
+
+
+def _vm_price_overview_to_response(
+    lookup_key: PricingLookupKey,
+    snapshot: PricingSnapshot | None,
+    snapshot_count: int
+) -> VmPriceOverviewResponse:
+    return VmPriceOverviewResponse(
+        lookup_key=_lookup_to_response(lookup_key),
+        current_snapshot=_snapshot_to_response(snapshot) if snapshot else None,
+        snapshot_count=snapshot_count
+    )
 
 
 @router.post(
@@ -323,3 +336,38 @@ async def refresh_all_vm_prices(
         requested_by=user.email
     )
     return _refresh_run_to_response(run)
+
+
+@router.get(
+    "/costs/vm-prices",
+    response_model=list[VmPriceOverviewResponse]
+)
+async def list_vm_prices(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_app_user)
+):
+    _ = user
+    lookup_keys = (
+        db.query(PricingLookupKey)
+        .filter(
+            PricingLookupKey.service_name == "Virtual Machines",
+            PricingLookupKey.is_active.is_(True)
+        )
+        .order_by(PricingLookupKey.last_refresh_at.desc().nullslast(), PricingLookupKey.id.asc())
+        .all()
+    )
+    return [
+        _vm_price_overview_to_response(
+            lookup_key=lookup_key,
+            snapshot=price_cache_service.get_current_snapshot(
+                db=db,
+                lookup_key_id=lookup_key.id
+            ),
+            snapshot_count=(
+                db.query(PricingSnapshot)
+                .filter(PricingSnapshot.lookup_key_id == lookup_key.id)
+                .count()
+            )
+        )
+        for lookup_key in lookup_keys
+    ]

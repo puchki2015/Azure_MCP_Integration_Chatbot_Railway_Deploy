@@ -4,21 +4,25 @@ import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Spinner } from "../../components/ui/Spinner";
 import { formatDate } from "../../utils/formatDate";
-import { analyzeCostRequest, listCostEstimates, refreshVmPrices, resolveCostRequest } from "./costs.api";
-import type { CostAnalysis, CostEstimate, PriceRefreshRun } from "./costs.types";
+import { analyzeCostRequest, listCostEstimates, listVmPrices, refreshVmPrices, resolveCostRequest } from "./costs.api";
+import type { CostAnalysis, CostEstimate, PriceRefreshRun, VmPriceOverview } from "./costs.types";
 
 const defaultRawInput =
   "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.";
 
+type CostsTab = "estimate" | "refresh" | "catalog";
+
 export function AzureResourceCostsPage() {
-  const [activeTab, setActiveTab] = useState<"estimate" | "refresh">("estimate");
+  const [activeTab, setActiveTab] = useState<CostsTab>("estimate");
   const [rawInput, setRawInput] = useState(defaultRawInput);
   const [analysis, setAnalysis] = useState<CostAnalysis | null>(null);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [estimates, setEstimates] = useState<CostEstimate[]>([]);
   const [activeEstimate, setActiveEstimate] = useState<CostEstimate | null>(null);
   const [refreshRun, setRefreshRun] = useState<PriceRefreshRun | null>(null);
+  const [vmPrices, setVmPrices] = useState<VmPriceOverview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingVmPrices, setLoadingVmPrices] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,6 +32,20 @@ export function AzureResourceCostsPage() {
     const data = await listCostEstimates();
     setEstimates(data);
     setActiveEstimate(data[0] ?? null);
+  };
+
+  const loadVmCatalog = async () => {
+    setLoadingVmPrices(true);
+    setError(null);
+
+    try {
+      const data = await listVmPrices();
+      setVmPrices(data);
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "Failed to load VM prices");
+    } finally {
+      setLoadingVmPrices(false);
+    }
   };
 
   useEffect(() => {
@@ -59,6 +77,12 @@ export function AzureResourceCostsPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "catalog" && vmPrices.length === 0 && !loadingVmPrices) {
+      void loadVmCatalog();
+    }
+  }, [activeTab, loadingVmPrices, vmPrices.length]);
 
   const runAnalysis = async () => {
     if (!rawInput.trim()) {
@@ -172,6 +196,15 @@ export function AzureResourceCostsPage() {
             onClick={() => setActiveTab("refresh")}
           >
             Refresh VM prices
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "catalog"}
+            className={["cost-tab", activeTab === "catalog" ? "cost-tab--active" : ""].join(" ")}
+            onClick={() => setActiveTab("catalog")}
+          >
+            VM catalog
           </button>
         </div>
 
@@ -357,7 +390,7 @@ export function AzureResourceCostsPage() {
               </Card>
             </div>
           </>
-        ) : (
+        ) : activeTab === "refresh" ? (
           <div className="cost-page__cards">
             <Card className="cost-card">
               <span className="cost-card__eyebrow">VM refresh job</span>
@@ -398,6 +431,72 @@ export function AzureResourceCostsPage() {
                   title="No refresh run yet"
                   description="Run the VM refresh job to update all cached Virtual Machine pricing rows."
                 />
+              )}
+            </Card>
+          </div>
+        ) : (
+          <div className="cost-page__cards">
+            <Card className="cost-card">
+              <span className="cost-card__eyebrow">VM catalog</span>
+              <h2>Cached VM types in Postgres</h2>
+              <p>
+                This shows the active VM lookup keys and their latest snapshot, so you can see exactly which VM types
+                are currently cached.
+              </p>
+
+              <div className="cost-form__actions">
+                <Button onClick={() => void loadVmCatalog()} disabled={loadingVmPrices}>
+                  {loadingVmPrices ? "Loading..." : "Reload VM catalog"}
+                </Button>
+                <span className="cost-form__hint">
+                  The table below mirrors the current `pricing_lookup_keys` and `pricing_snapshots` rows for VMs.
+                </span>
+              </div>
+            </Card>
+
+            <Card className="cost-card cost-card--accent">
+              <span className="cost-card__eyebrow">Current VM rows</span>
+              {vmPrices.length === 0 && !loadingVmPrices ? (
+                <EmptyState
+                  title="No VM prices cached"
+                  description="Run the VM refresh job first to populate the catalog."
+                />
+              ) : (
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>VM type</th>
+                        <th>Region</th>
+                        <th>Meter</th>
+                        <th>Price</th>
+                        <th>Updated</th>
+                        <th>Snapshots</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vmPrices.map((item) => (
+                        <tr key={item.lookup_key.id}>
+                          <td>
+                            <strong>{item.lookup_key.arm_sku ?? item.lookup_key.meter_name ?? "Unknown"}</strong>
+                            <div>{item.lookup_key.product_name ?? item.lookup_key.service_name}</div>
+                          </td>
+                          <td>{item.lookup_key.region ?? "n/a"}</td>
+                          <td>{item.lookup_key.meter_name ?? "n/a"}</td>
+                          <td>
+                            {item.current_snapshot
+                              ? `$${Number(item.current_snapshot.unit_price).toFixed(6)} / ${
+                                  item.current_snapshot.unit_of_measure ?? "unit"
+                                }`
+                              : "n/a"}
+                          </td>
+                          <td>{item.current_snapshot ? formatDate(item.current_snapshot.fetched_at) : "n/a"}</td>
+                          <td>{item.snapshot_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
           </div>
