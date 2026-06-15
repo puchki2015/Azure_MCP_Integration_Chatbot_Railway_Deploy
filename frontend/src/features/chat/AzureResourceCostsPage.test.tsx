@@ -238,7 +238,7 @@ describe("AzureResourceCostsPage", () => {
         page: 1,
         page_size: 8,
         total_items: 17,
-        total_pages: 3
+        total_pages: 9
       })
       .mockResolvedValueOnce({
         items: [
@@ -355,6 +355,7 @@ describe("AzureResourceCostsPage", () => {
     expect(screen.getByText(/Standard_B4ms/i)).toBeInTheDocument();
     expect(screen.getByText(/0.080000 \/ 1 Hour/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^2$/ })).toBeInTheDocument();
+    expect(screen.getByText("…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /SQL Database/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^2$/ }));

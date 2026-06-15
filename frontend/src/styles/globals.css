@@ -532,6 +532,14 @@ button, input { font: inherit; }
   justify-content: center;
 }
 
+.cost-catalog__ellipsis {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .cost-catalog__pages [aria-current="page"] {
   transform: translateY(-1px);
 }

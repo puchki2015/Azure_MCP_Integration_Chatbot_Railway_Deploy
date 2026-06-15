@@ -17,6 +17,31 @@ const catalogServices: Array<{ label: string; value: PriceCatalogService }> = [
   { label: "SQL Database", value: "Azure SQL Database" }
 ];
 
+type PagerItem = number | "ellipsis";
+
+function buildPagerItems(currentPage: number, totalPages: number): PagerItem[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const items = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const pages = Array.from(items)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right);
+
+  const result: PagerItem[] = [];
+  for (let index = 0; index < pages.length; index += 1) {
+    const page = pages[index];
+    const previous = pages[index - 1];
+    if (previous && page - previous > 1) {
+      result.push("ellipsis");
+    }
+    result.push(page);
+  }
+
+  return result;
+}
+
 export function AzureResourceCostsPage() {
   const [activeTab, setActiveTab] = useState<CostsTab>("estimate");
   const [rawInput, setRawInput] = useState(defaultRawInput);
@@ -567,21 +592,27 @@ export function AzureResourceCostsPage() {
                         Previous
                       </Button>
                       <div className="cost-catalog__pages" role="navigation" aria-label="Catalog pages">
-                        {Array.from({ length: catalog.total_pages }, (_, index) => index + 1).map((page) => (
-                          <button
-                            key={page}
-                            type="button"
-                            className={[
-                              "cost-catalog__page",
-                              page === catalog.page ? "cost-catalog__page--active" : ""
-                            ].join(" ")}
-                            onClick={() => handleCatalogPageChange(page)}
-                            disabled={loadingCatalog}
-                            aria-current={page === catalog.page ? "page" : undefined}
-                          >
-                            {page}
-                          </button>
-                        ))}
+                        {buildPagerItems(catalog.page, catalog.total_pages).map((item, index) =>
+                          item === "ellipsis" ? (
+                            <span key={`ellipsis-${index}`} className="cost-catalog__ellipsis" aria-hidden="true">
+                              …
+                            </span>
+                          ) : (
+                            <button
+                              key={item}
+                              type="button"
+                              className={[
+                                "cost-catalog__page",
+                                item === catalog.page ? "cost-catalog__page--active" : ""
+                              ].join(" ")}
+                              onClick={() => handleCatalogPageChange(item)}
+                              disabled={loadingCatalog}
+                              aria-current={item === catalog.page ? "page" : undefined}
+                            >
+                              {item}
+                            </button>
+                          )
+                        )}
                       </div>
                       <Button
                         onClick={() => handleCatalogPageChange(Math.min(catalog.total_pages, catalog.page + 1))}
