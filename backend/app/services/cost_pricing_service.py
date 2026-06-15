@@ -136,6 +136,93 @@ class CostPricingService:
             currency_code=lookup.currency_code or "USD"
         )
 
+    def _vm_query_candidates(self, lookup: PricingLookupKey) -> list[RetailPriceQuery]:
+        canonical_sku = self._canonical_vm_sku(lookup.arm_sku or lookup.tier)
+        meter_name = self._canonical_vm_meter(canonical_sku or lookup.meter_name)
+        currency_code = lookup.currency_code or "USD"
+        region = lookup.region
+
+        candidates = [
+            RetailPriceQuery(
+                service_name="Virtual Machines",
+                arm_region_name=region,
+                arm_sku_name=canonical_sku,
+                sku_name=canonical_sku,
+                product_name=lookup.product_name or "Virtual Machines",
+                meter_name=meter_name,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Virtual Machines",
+                arm_region_name=region,
+                arm_sku_name=canonical_sku,
+                sku_name=canonical_sku,
+                meter_name=meter_name,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Virtual Machines",
+                arm_region_name=region,
+                arm_sku_name=canonical_sku,
+                sku_name=canonical_sku,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Virtual Machines",
+                arm_region_name=region,
+                meter_name=meter_name,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Virtual Machines",
+                arm_region_name=region,
+                price_type="Consumption",
+                currency_code=currency_code
+            )
+        ]
+
+        deduped: list[RetailPriceQuery] = []
+        seen: set[tuple[Any, ...]] = set()
+        for candidate in candidates:
+            signature = (
+                candidate.service_name,
+                candidate.service_family,
+                candidate.arm_region_name,
+                candidate.arm_sku_name,
+                candidate.sku_name,
+                candidate.product_name,
+                candidate.meter_name,
+                candidate.price_type,
+                candidate.currency_code
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            deduped.append(candidate)
+        return deduped
+
+    def _fetch_best_vm_item(
+        self,
+        lookup: PricingLookupKey
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str, dict[str, Any]]:
+        last_items: list[dict[str, Any]] = []
+        last_api_url = "https://prices.azure.com/api/retail/prices"
+        last_request_params: dict[str, Any] = {}
+
+        for query in self._vm_query_candidates(lookup):
+            best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(query)
+            last_items = items
+            last_api_url = api_url
+            last_request_params = request_params
+            if best_item is not None:
+                return best_item, items, api_url, request_params
+
+        return None, last_items, last_api_url, last_request_params
+
     def _resolve_sql(self, intent: CostResourceIntent, selections: dict[str, str]) -> ResolvedPricingLine:
         region = self._first_selection(selections, "region") or intent.region
         tier = self._first_selection(selections, "sql_tier", "tier") or intent.sku
@@ -216,9 +303,12 @@ class CostPricingService:
         )
 
         if snapshot is None or price_cache_service.should_refresh(lookup):
-            best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(
-                resolved.query
-            )
+            if resolved.intent.resource_type.lower().startswith("virtual machine"):
+                best_item, items, api_url, request_params = self._fetch_best_vm_item(lookup)
+            else:
+                best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(
+                    resolved.query
+                )
             if best_item is None:
                 raise HTTPException(
                     status_code=422,
@@ -357,8 +447,7 @@ class CostPricingService:
             for lookup_key in lookup_keys:
                 run.keys_processed += 1
                 try:
-                    query = self._build_vm_query_for_lookup(lookup_key)
-                    best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(query)
+                    best_item, items, api_url, request_params = self._fetch_best_vm_item(lookup_key)
                     if best_item is None:
                         run.keys_unchanged += 1
                         if not run.error_summary:

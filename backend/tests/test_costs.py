@@ -234,10 +234,15 @@ class CostCacheTests(unittest.TestCase):
             "unitPrice": 0.08
         }
 
-        with patch(
+        fetch_mock = patch(
             "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
-            return_value=(best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
-        ):
+            side_effect=[
+                (None, [], "https://prices.azure.com/api/retail/prices", {}),
+                (best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+            ]
+        )
+
+        with fetch_mock as mocked_fetch:
             run = cost_pricing_service.refresh_all_vm_prices(
                 db=self.db,
                 requested_by="tester@local"
@@ -258,6 +263,7 @@ class CostCacheTests(unittest.TestCase):
         self.assertEqual(run.keys_failed, 0)
         self.assertEqual(refreshed_lookup.last_snapshot_id, current_snapshot.id)
         self.assertTrue(current_snapshot.is_current)
+        self.assertGreaterEqual(mocked_fetch.call_count, 2)
 
 
 if __name__ == "__main__":
