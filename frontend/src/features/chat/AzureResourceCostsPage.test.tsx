@@ -5,11 +5,13 @@ import { AzureResourceCostsPage } from "./AzureResourceCostsPage";
 const listCostEstimatesMock = vi.fn();
 const analyzeCostRequestMock = vi.fn();
 const resolveCostRequestMock = vi.fn();
+const refreshVmPricesMock = vi.fn();
 
 vi.mock("./costs.api", () => ({
   analyzeCostRequest: (...args: unknown[]) => analyzeCostRequestMock(...args),
   listCostEstimates: (...args: unknown[]) => listCostEstimatesMock(...args),
-  resolveCostRequest: (...args: unknown[]) => resolveCostRequestMock(...args)
+  resolveCostRequest: (...args: unknown[]) => resolveCostRequestMock(...args),
+  refreshVmPrices: (...args: unknown[]) => refreshVmPricesMock(...args)
 }));
 
 describe("AzureResourceCostsPage", () => {
@@ -17,6 +19,7 @@ describe("AzureResourceCostsPage", () => {
     listCostEstimatesMock.mockReset();
     analyzeCostRequestMock.mockReset();
     resolveCostRequestMock.mockReset();
+    refreshVmPricesMock.mockReset();
   });
 
   it("asks for confirmation before pricing and then saves the estimate after selection", async () => {
@@ -144,5 +147,39 @@ describe("AzureResourceCostsPage", () => {
         sql_tier: "General Purpose"
       }
     });
+  });
+
+  it("runs the VM refresh job from the refresh tab", async () => {
+    listCostEstimatesMock.mockResolvedValueOnce([]);
+    refreshVmPricesMock.mockResolvedValueOnce({
+      id: 7,
+      started_at: "2026-06-15T10:12:00Z",
+      finished_at: "2026-06-15T10:13:00Z",
+      status: "SUCCESS",
+      trigger_type: "manual",
+      requested_by: "tester@local",
+      keys_processed: 2,
+      keys_refreshed: 2,
+      keys_unchanged: 0,
+      keys_failed: 0,
+      error_summary: null,
+      refresh_metadata: {
+        scope: "virtual_machines"
+      }
+    });
+
+    render(<AzureResourceCostsPage />);
+
+    expect(await screen.findByText(/No estimates yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("tab", { name: /Refresh VM prices/i })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Run VM refresh/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /Run #7/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Status SUCCESS/i)).toBeInTheDocument();
+    expect(refreshVmPricesMock).toHaveBeenCalledTimes(1);
   });
 });

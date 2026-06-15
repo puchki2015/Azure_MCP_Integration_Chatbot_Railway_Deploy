@@ -4,21 +4,24 @@ import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Spinner } from "../../components/ui/Spinner";
 import { formatDate } from "../../utils/formatDate";
-import { analyzeCostRequest, listCostEstimates, resolveCostRequest } from "./costs.api";
-import type { CostAnalysis, CostEstimate } from "./costs.types";
+import { analyzeCostRequest, listCostEstimates, refreshVmPrices, resolveCostRequest } from "./costs.api";
+import type { CostAnalysis, CostEstimate, PriceRefreshRun } from "./costs.types";
 
 const defaultRawInput =
   "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.";
 
 export function AzureResourceCostsPage() {
+  const [activeTab, setActiveTab] = useState<"estimate" | "refresh">("estimate");
   const [rawInput, setRawInput] = useState(defaultRawInput);
   const [analysis, setAnalysis] = useState<CostAnalysis | null>(null);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [estimates, setEstimates] = useState<CostEstimate[]>([]);
   const [activeEstimate, setActiveEstimate] = useState<CostEstimate | null>(null);
+  const [refreshRun, setRefreshRun] = useState<PriceRefreshRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadEstimates = async () => {
@@ -106,6 +109,20 @@ export function AzureResourceCostsPage() {
     }
   };
 
+  const runVmRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+
+    try {
+      const result = await refreshVmPrices();
+      setRefreshRun(result);
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "Failed to refresh VM prices");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleSelectionChange = (fieldName: string, value: string) => {
     setSelections((current) => ({
       ...current,
@@ -137,182 +154,254 @@ export function AzureResourceCostsPage() {
           any pricing-critical field is unclear, and only then create the estimate from cached or live Azure pricing.
         </p>
 
+        <div className="cost-tabs" role="tablist" aria-label="Cost page tabs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "estimate"}
+            className={["cost-tab", activeTab === "estimate" ? "cost-tab--active" : ""].join(" ")}
+            onClick={() => setActiveTab("estimate")}
+          >
+            Estimate flow
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "refresh"}
+            className={["cost-tab", activeTab === "refresh" ? "cost-tab--active" : ""].join(" ")}
+            onClick={() => setActiveTab("refresh")}
+          >
+            Refresh VM prices
+          </button>
+        </div>
+
         {error ? <div className="error-banner">{error}</div> : null}
 
-        <div className="cost-page__cards">
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">Request input</span>
-            <h2>Describe the workload</h2>
-            <p>
-              The system extracts resource intents from plain English, flags ambiguities, and shows suggested
-              options before pricing.
-            </p>
+        {activeTab === "estimate" ? (
+          <>
+            <div className="cost-page__cards">
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">Request input</span>
+                <h2>Describe the workload</h2>
+                <p>
+                  The system extracts resource intents from plain English, flags ambiguities, and shows suggested
+                  options before pricing.
+                </p>
 
-            <div className="cost-form">
-              <label>
-                <span className="cost-form__label">Plain-English request</span>
-                <textarea
-                  className="input cost-form__textarea"
-                  rows={6}
-                  value={rawInput}
-                  onChange={(event) => setRawInput(event.target.value)}
-                />
-              </label>
+                <div className="cost-form">
+                  <label>
+                    <span className="cost-form__label">Plain-English request</span>
+                    <textarea
+                      className="input cost-form__textarea"
+                      rows={6}
+                      value={rawInput}
+                      onChange={(event) => setRawInput(event.target.value)}
+                    />
+                  </label>
 
-              <div className="cost-form__actions">
-                <Button onClick={() => void runAnalysis()} disabled={analyzing || resolving}>
-                  {analyzing ? "Analyzing..." : "Analyze request"}
-                </Button>
-                <span className="cost-form__hint">
-                  Clarifications are required before pricing ambiguous VM size, OS image, tier, or region inputs.
-                </span>
-              </div>
+                  <div className="cost-form__actions">
+                    <Button onClick={() => void runAnalysis()} disabled={analyzing || resolving}>
+                      {analyzing ? "Analyzing..." : "Analyze request"}
+                    </Button>
+                    <span className="cost-form__hint">
+                      Clarifications are required before pricing ambiguous VM size, OS image, tier, or region inputs.
+                    </span>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="cost-card cost-card--accent">
+                <span className="cost-card__eyebrow">Current state</span>
+                {analysis ? (
+                  <>
+                    <h2>{analysis.needs_confirmation ? "Confirmation needed" : "Ready to price"}</h2>
+                    <p>{analysis.normalized_text}</p>
+                    <ul className="cost-page__list">
+                      {analysis.intents.map((intent, index) => (
+                        <li key={`${intent.resource_type}-${index}`}>
+                          {intent.resource_type}
+                          {intent.quantity ? ` x ${intent.quantity}` : ""}
+                          {intent.region ? ` in ${intent.region}` : ""}
+                          {intent.sku ? ` (${intent.sku})` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    {analysis.assumptions.length > 0 ? (
+                      <div className="cost-page__notes">
+                        {analysis.assumptions.map((assumption) => (
+                          <p key={assumption}>{assumption}</p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No analysis yet"
+                    description="Analyze a request to see whether the backend can price it immediately or needs confirmation."
+                  />
+                )}
+              </Card>
             </div>
-          </Card>
 
-          <Card className="cost-card cost-card--accent">
-            <span className="cost-card__eyebrow">Current state</span>
-            {analysis ? (
-              <>
-                <h2>{analysis.needs_confirmation ? "Confirmation needed" : "Ready to price"}</h2>
-                <p>{analysis.normalized_text}</p>
-                <ul className="cost-page__list">
-                  {analysis.intents.map((intent, index) => (
-                    <li key={`${intent.resource_type}-${index}`}>
-                      {intent.resource_type}
-                      {intent.quantity ? ` × ${intent.quantity}` : ""}
-                      {intent.region ? ` in ${intent.region}` : ""}
-                      {intent.sku ? ` (${intent.sku})` : ""}
-                    </li>
+            {analysis?.clarification_items.length ? (
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">Clarifications</span>
+                <h2>Confirm the ambiguous fields</h2>
+                <p>Select a value for each field below. These values will be passed back to the backend before pricing.</p>
+
+                <div className="cost-form">
+                  {analysis.clarification_items.map((item) => (
+                    <label key={item.field_name} className="cost-form__field">
+                      <span className="cost-form__label">{item.message}</span>
+                      <select
+                        className="input"
+                        value={selections[item.field_name] ?? ""}
+                        onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
+                      >
+                        <option value="">Select one</option>
+                        {item.suggested_values.map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ))}
-                </ul>
-                {analysis.assumptions.length > 0 ? (
-                  <div className="cost-page__notes">
-                    {analysis.assumptions.map((assumption) => (
-                      <p key={assumption}>{assumption}</p>
+
+                  <div className="cost-form__actions">
+                    <Button
+                      onClick={() => void runResolution()}
+                      disabled={resolving || analysis.clarification_items.some((item) => !selections[item.field_name])}
+                    >
+                      {resolving ? "Generating estimate..." : "Confirm and price"}
+                    </Button>
+                    <span className="cost-form__hint">No estimate is created until the clarifications are confirmed.</span>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <div className="cost-page__cards">
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">Latest estimate</span>
+                {activeEstimate ? (
+                  <>
+                    <h2>Estimate #{activeEstimate.id}</h2>
+                    <p>
+                      Total: ${Number(activeEstimate.total_monthly ?? 0).toFixed(2)} / month, $
+                      {Number(activeEstimate.total_hourly ?? 0).toFixed(4)} / hour
+                    </p>
+                    <ul className="cost-page__list">
+                      {activeEstimate.lines.map((line) => (
+                        <li key={line.id}>
+                          {line.resource_type} {line.resource_name ? `(${line.resource_name})` : ""}: {line.quantity}{" "}
+                          {line.unit_name} at ${Number(line.hourly_rate).toFixed(4)}/hr
+                        </li>
+                      ))}
+                    </ul>
+                    <small className="session-summary-card__meta">
+                      Saved {formatDate(activeEstimate.created_at)} · status {activeEstimate.status}
+                    </small>
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No estimates yet"
+                    description="Confirm a request to generate the first priced estimate."
+                  />
+                )}
+              </Card>
+
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">History</span>
+                <h2>Recently saved estimates</h2>
+                {estimates.length === 0 ? (
+                  <EmptyState title="No saved estimates" description="Your estimate history will appear here." />
+                ) : (
+                  <div className="session-list">
+                    {estimates.map((estimate) => (
+                      <button
+                        key={estimate.id}
+                        className={[
+                          "session-item",
+                          activeEstimate?.id === estimate.id ? "session-item--active" : ""
+                        ].join(" ")}
+                        onClick={() => setActiveEstimate(estimate)}
+                      >
+                        <strong>Estimate #{estimate.id}</strong>
+                        <span>{estimate.currency_code}</span>
+                        <small>{formatDate(estimate.created_at)}</small>
+                      </button>
                     ))}
                   </div>
-                ) : null}
-              </>
-            ) : (
-              <EmptyState
-                title="No analysis yet"
-                description="Analyze a request to see whether the backend can price it immediately or needs confirmation."
-              />
-            )}
-          </Card>
-        </div>
+                )}
+              </Card>
+            </div>
 
-        {analysis?.clarification_items.length ? (
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">Clarifications</span>
-            <h2>Confirm the ambiguous fields</h2>
-            <p>Select a value for each field below. These values will be passed back to the backend before pricing.</p>
+            <div className="cost-page__cards">
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">Storage model</span>
+                <h2>What gets written</h2>
+                <p>
+                  Analysis results stay in the request state until the user confirms. Once priced, the backend writes
+                  the estimate, the line items, and the cached pricing snapshot that was used.
+                </p>
+              </Card>
 
-            <div className="cost-form">
-              {analysis.clarification_items.map((item) => (
-                <label key={item.field_name} className="cost-form__field">
-                  <span className="cost-form__label">{item.message}</span>
-                  <select
-                    className="input"
-                    value={selections[item.field_name] ?? ""}
-                    onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
-                  >
-                    <option value="">Select one</option>
-                    {item.suggested_values.map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
+              <Card className="cost-card">
+                <span className="cost-card__eyebrow">Confirmation policy</span>
+                <h2>No silent assumptions</h2>
+                <p>
+                  If the backend cannot confidently infer a pricing-critical field, it returns suggested values and
+                  waits for your confirmation before calculating the estimate.
+                </p>
+              </Card>
+            </div>
+          </>
+        ) : (
+          <div className="cost-page__cards">
+            <Card className="cost-card">
+              <span className="cost-card__eyebrow">VM refresh job</span>
+              <h2>Refresh all stored VM prices</h2>
+              <p>
+                This triggers a backend job that walks all active Virtual Machines lookup keys in Postgres, fetches
+                the current Azure Retail Prices row, and stores a new snapshot when the price changed.
+              </p>
 
               <div className="cost-form__actions">
-                <Button
-                  onClick={() => void runResolution()}
-                  disabled={resolving || analysis.clarification_items.some((item) => !selections[item.field_name])}
-                >
-                  {resolving ? "Generating estimate..." : "Confirm and price"}
+                <Button onClick={() => void runVmRefresh()} disabled={refreshing}>
+                  {refreshing ? "Refreshing..." : "Run VM refresh"}
                 </Button>
-                <span className="cost-form__hint">No estimate is created until the clarifications are confirmed.</span>
+                <span className="cost-form__hint">
+                  Use this after changing VM pricing assumptions or when you want to refresh cached VM snapshots.
+                </span>
               </div>
-            </div>
-          </Card>
-        ) : null}
+            </Card>
 
-        <div className="cost-page__cards">
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">Latest estimate</span>
-            {activeEstimate ? (
-              <>
-                <h2>Estimate #{activeEstimate.id}</h2>
-                <p>
-                  Total: ${Number(activeEstimate.total_monthly ?? 0).toFixed(2)} / month, $
-                  {Number(activeEstimate.total_hourly ?? 0).toFixed(4)} / hour
-                </p>
-                <ul className="cost-page__list">
-                  {activeEstimate.lines.map((line) => (
-                    <li key={line.id}>
-                      {line.resource_type} {line.resource_name ? `(${line.resource_name})` : ""}: {line.quantity}{" "}
-                      {line.unit_name} at ${Number(line.hourly_rate).toFixed(4)}/hr
-                    </li>
-                  ))}
-                </ul>
-                <small className="session-summary-card__meta">
-                  Saved {formatDate(activeEstimate.created_at)} · status {activeEstimate.status}
-                </small>
-              </>
-            ) : (
-              <EmptyState title="No estimates yet" description="Confirm a request to generate the first priced estimate." />
-            )}
-          </Card>
-
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">History</span>
-            <h2>Recently saved estimates</h2>
-            {estimates.length === 0 ? (
-              <EmptyState title="No saved estimates" description="Your estimate history will appear here." />
-            ) : (
-              <div className="session-list">
-                {estimates.map((estimate) => (
-                  <button
-                    key={estimate.id}
-                    className={[
-                      "session-item",
-                      activeEstimate?.id === estimate.id ? "session-item--active" : ""
-                    ].join(" ")}
-                    onClick={() => setActiveEstimate(estimate)}
-                  >
-                    <strong>Estimate #{estimate.id}</strong>
-                    <span>{estimate.currency_code}</span>
-                    <small>{formatDate(estimate.created_at)}</small>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="cost-page__cards">
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">Storage model</span>
-            <h2>What gets written</h2>
-            <p>
-              Analysis results stay in the request state until the user confirms. Once priced, the backend writes the
-              estimate, the line items, and the cached pricing snapshot that was used.
-            </p>
-          </Card>
-
-          <Card className="cost-card">
-            <span className="cost-card__eyebrow">Confirmation policy</span>
-            <h2>No silent assumptions</h2>
-            <p>
-              If the backend cannot confidently infer a pricing-critical field, it returns suggested values and waits
-              for your confirmation before calculating the estimate.
-            </p>
-          </Card>
-        </div>
+            <Card className="cost-card cost-card--accent">
+              <span className="cost-card__eyebrow">Latest refresh run</span>
+              {refreshRun ? (
+                <>
+                  <h2>Run #{refreshRun.id}</h2>
+                  <p>
+                    Status {refreshRun.status} · processed {refreshRun.keys_processed} · refreshed{" "}
+                    {refreshRun.keys_refreshed} · unchanged {refreshRun.keys_unchanged} · failed{" "}
+                    {refreshRun.keys_failed}
+                  </p>
+                  {refreshRun.error_summary ? <p>{refreshRun.error_summary}</p> : null}
+                  <small className="session-summary-card__meta">
+                    Started {formatDate(refreshRun.started_at)} · finished{" "}
+                    {refreshRun.finished_at ? formatDate(refreshRun.finished_at) : "in progress"}
+                  </small>
+                </>
+              ) : (
+                <EmptyState
+                  title="No refresh run yet"
+                  description="Run the VM refresh job to update all cached Virtual Machine pricing rows."
+                />
+              )}
+            </Card>
+          </div>
+        )}
       </section>
     </main>
   );

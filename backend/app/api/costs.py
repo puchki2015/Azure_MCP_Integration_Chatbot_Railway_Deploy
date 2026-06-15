@@ -308,3 +308,18 @@ async def create_refresh_run(
         refresh_metadata=request.refresh_metadata or {}
     )
     return _refresh_run_to_response(run)
+
+
+@router.post(
+    "/costs/refresh-vms",
+    response_model=PriceRefreshRunResponse
+)
+async def refresh_all_vm_prices(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_app_user)
+):
+    run = cost_pricing_service.refresh_all_vm_prices(
+        db=db,
+        requested_by=user.email
+    )
+    return _refresh_run_to_response(run)

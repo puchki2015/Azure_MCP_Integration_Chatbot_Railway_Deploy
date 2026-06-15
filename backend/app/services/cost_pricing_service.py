@@ -40,10 +40,17 @@ class CostPricingService:
             return None
 
         value = sku.strip()
-        if value.lower().startswith("standard_"):
-            return value
-        if value.lower().startswith(("b", "d", "e", "f", "g", "m", "l")):
-            return f"Standard_{value}"
+        lower_value = value.lower()
+
+        if lower_value.startswith("standard_"):
+            suffix = value.split("_", 1)[1] if "_" in value else ""
+            if not suffix:
+                return "Standard"
+            return f"Standard_{suffix[0].upper()}{suffix[1:]}"
+
+        if lower_value.startswith(("b", "d", "e", "f", "g", "m", "l")):
+            return f"Standard_{value[0].upper()}{value[1:]}"
+
         return value
 
     def _canonical_vm_meter(self, sku: str | None) -> str | None:
@@ -51,7 +58,10 @@ class CostPricingService:
             return None
         value = sku.strip()
         if value.lower().startswith("standard_"):
-            return value.split("_", 1)[1]
+            suffix = value.split("_", 1)[1] if "_" in value else ""
+            if not suffix:
+                return None
+            return f"{suffix[0].upper()}{suffix[1:]}"
         return value
 
     def _first_selection(self, selections: dict[str, str], *field_names: str) -> str | None:
@@ -109,6 +119,21 @@ class CostPricingService:
                 "os_image": os_image,
                 "resolution_source": "confirmed_selection" if selections else "parsed_intent"
             }
+        )
+
+    def _build_vm_query_for_lookup(self, lookup: PricingLookupKey) -> RetailPriceQuery:
+        canonical_sku = self._canonical_vm_sku(lookup.arm_sku or lookup.tier)
+        meter_name = self._canonical_vm_meter(canonical_sku or lookup.meter_name)
+
+        return RetailPriceQuery(
+            service_name="Virtual Machines",
+            arm_region_name=lookup.region,
+            arm_sku_name=canonical_sku,
+            sku_name=canonical_sku,
+            product_name=lookup.product_name or "Virtual Machines",
+            meter_name=meter_name or lookup.meter_name,
+            price_type="Consumption",
+            currency_code=lookup.currency_code or "USD"
         )
 
     def _resolve_sql(self, intent: CostResourceIntent, selections: dict[str, str]) -> ResolvedPricingLine:
@@ -303,6 +328,87 @@ class CostPricingService:
             for line in stored_lines
         ]
         return analysis, estimate_response
+
+    def refresh_all_vm_prices(
+        self,
+        db: Session,
+        requested_by: str | None = None
+    ) -> PriceRefreshRun:
+        run = price_cache_service.start_refresh_run(
+            db=db,
+            trigger_type="manual",
+            requested_by=requested_by,
+            refresh_metadata={
+                "scope": "virtual_machines",
+                "source": "refresh_all_vm_prices"
+            }
+        )
+
+        try:
+            lookup_keys = (
+                db.query(PricingLookupKey)
+                .filter(
+                    PricingLookupKey.is_active.is_(True),
+                    PricingLookupKey.service_name == "Virtual Machines"
+                )
+                .all()
+            )
+
+            for lookup_key in lookup_keys:
+                run.keys_processed += 1
+                try:
+                    query = self._build_vm_query_for_lookup(lookup_key)
+                    best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(query)
+                    if best_item is None:
+                        run.keys_unchanged += 1
+                        if not run.error_summary:
+                            run.error_summary = f"{lookup_key.normalized_key}: no live Azure VM price matched"
+                        else:
+                            run.error_summary = f"{run.error_summary}\n{lookup_key.normalized_key}: no live Azure VM price matched"
+                        continue
+
+                    before_snapshot = price_cache_service.get_current_snapshot(
+                        db=db,
+                        lookup_key_id=lookup_key.id
+                    )
+                    after_snapshot = price_cache_service.refresh_lookup_key(
+                        db=db,
+                        lookup_key=lookup_key,
+                        api_url=api_url,
+                        raw_payload=best_item,
+                        request_params={
+                            **request_params,
+                            "candidate_count": len(items),
+                            "source": "refresh_all_vm_prices"
+                        }
+                    )
+
+                    if before_snapshot and before_snapshot.payload_hash == after_snapshot.payload_hash:
+                        run.keys_unchanged += 1
+                    else:
+                        run.keys_refreshed += 1
+                except Exception as ex:
+                    run.keys_failed += 1
+                    run.error_summary = (
+                        f"{run.error_summary}\n{lookup_key.normalized_key}: {ex}"
+                        if run.error_summary
+                        else f"{lookup_key.normalized_key}: {ex}"
+                    )
+
+            db.commit()
+            return price_cache_service.finish_refresh_run(
+                db=db,
+                run=run,
+                status="SUCCESS" if run.keys_failed == 0 else "PARTIAL",
+                error_summary=run.error_summary
+            )
+        except Exception as ex:
+            return price_cache_service.finish_refresh_run(
+                db=db,
+                run=run,
+                status="FAILED",
+                error_summary=str(ex)
+            )
 
 
 cost_pricing_service = CostPricingService()

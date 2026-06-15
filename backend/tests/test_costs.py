@@ -207,6 +207,58 @@ class CostCacheTests(unittest.TestCase):
         self.assertAlmostEqual(float(estimate.total_hourly), 0.16)
         self.assertAlmostEqual(float(estimate.total_monthly), 116.8)
 
+    def test_refresh_all_vm_prices_updates_vm_lookup_keys(self):
+        lookup = price_cache_service.get_or_create_lookup_key(
+            db=self.db,
+            spec={
+                "service_name": "Virtual Machines",
+                "arm_sku": "Standard_b4ms",
+                "meter_name": "b4ms",
+                "product_name": "Virtual Machines",
+                "region": "eastus",
+                "currency_code": "USD",
+                "unit_of_measure": "1 Hour"
+            }
+        )
+
+        best_item = {
+            "id": "vm-row-refresh-001",
+            "skuName": "Standard_B4ms",
+            "productName": "Virtual Machines Bsv2 Series",
+            "meterName": "B4ms",
+            "armRegionName": "eastus",
+            "currencyCode": "USD",
+            "unitOfMeasure": "1 Hour",
+            "type": "Consumption",
+            "retailPrice": 0.08,
+            "unitPrice": 0.08
+        }
+
+        with patch(
+            "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
+            return_value=(best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+        ):
+            run = cost_pricing_service.refresh_all_vm_prices(
+                db=self.db,
+                requested_by="tester@local"
+            )
+
+        refreshed_lookup = (
+            self.db.query(PricingLookupKey)
+            .filter(PricingLookupKey.id == lookup.id)
+            .first()
+        )
+        current_snapshot = price_cache_service.get_current_snapshot(
+            db=self.db,
+            lookup_key_id=lookup.id
+        )
+
+        self.assertEqual(run.keys_processed, 1)
+        self.assertEqual(run.keys_refreshed, 1)
+        self.assertEqual(run.keys_failed, 0)
+        self.assertEqual(refreshed_lookup.last_snapshot_id, current_snapshot.id)
+        self.assertTrue(current_snapshot.is_current)
+
 
 if __name__ == "__main__":
     unittest.main()

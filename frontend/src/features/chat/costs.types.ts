@@ -62,6 +62,21 @@ export type CostResolutionResult =
       estimate: CostEstimate;
     };
 
+export type PriceRefreshRun = {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  trigger_type: string;
+  requested_by: string | null;
+  keys_processed: number;
+  keys_refreshed: number;
+  keys_unchanged: number;
+  keys_failed: number;
+  error_summary: string | null;
+  refresh_metadata: Record<string, unknown> | null;
+};
+
 export type CostEstimateCreateRequest = {
   raw_input: string;
   normalized_request: Record<string, unknown>;
