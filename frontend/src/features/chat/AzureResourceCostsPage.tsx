@@ -5,7 +5,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Spinner } from "../../components/ui/Spinner";
 import { formatDate } from "../../utils/formatDate";
 import { analyzeCostRequest, listCostEstimates, listVmPrices, refreshVmPrices, resolveCostRequest } from "./costs.api";
-import type { CostAnalysis, CostEstimate, PriceRefreshRun, VmPriceOverview } from "./costs.types";
+import type { CostAnalysis, CostEstimate, PriceRefreshRun, VmPriceCatalog } from "./costs.types";
 
 const defaultRawInput =
   "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.";
@@ -20,7 +20,9 @@ export function AzureResourceCostsPage() {
   const [estimates, setEstimates] = useState<CostEstimate[]>([]);
   const [activeEstimate, setActiveEstimate] = useState<CostEstimate | null>(null);
   const [refreshRun, setRefreshRun] = useState<PriceRefreshRun | null>(null);
-  const [vmPrices, setVmPrices] = useState<VmPriceOverview[]>([]);
+  const [vmCatalog, setVmCatalog] = useState<VmPriceCatalog | null>(null);
+  const [vmCatalogPage, setVmCatalogPage] = useState(1);
+  const vmCatalogPageSize = 8;
   const [loading, setLoading] = useState(true);
   const [loadingVmPrices, setLoadingVmPrices] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -34,13 +36,14 @@ export function AzureResourceCostsPage() {
     setActiveEstimate(data[0] ?? null);
   };
 
-  const loadVmCatalog = async () => {
+  const loadVmCatalog = async (page = vmCatalogPage) => {
     setLoadingVmPrices(true);
     setError(null);
 
     try {
-      const data = await listVmPrices();
-      setVmPrices(data);
+      const data = await listVmPrices(page, vmCatalogPageSize);
+      setVmCatalog(data);
+      setVmCatalogPage(data.page);
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "Failed to load VM prices");
     } finally {
@@ -79,10 +82,10 @@ export function AzureResourceCostsPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "catalog" && vmPrices.length === 0 && !loadingVmPrices) {
-      void loadVmCatalog();
+    if (activeTab === "catalog") {
+      void loadVmCatalog(vmCatalogPage);
     }
-  }, [activeTab, loadingVmPrices, vmPrices.length]);
+  }, [activeTab, vmCatalogPage]);
 
   const runAnalysis = async () => {
     if (!rawInput.trim()) {
@@ -145,6 +148,13 @@ export function AzureResourceCostsPage() {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleVmCatalogPageChange = (page: number) => {
+    if (page === vmCatalogPage) {
+      return;
+    }
+    setVmCatalogPage(page);
   };
 
   const handleSelectionChange = (fieldName: string, value: string) => {
@@ -445,58 +455,124 @@ export function AzureResourceCostsPage() {
               </p>
 
               <div className="cost-form__actions">
-                <Button onClick={() => void loadVmCatalog()} disabled={loadingVmPrices}>
+                <Button onClick={() => void loadVmCatalog(vmCatalogPage)} disabled={loadingVmPrices}>
                   {loadingVmPrices ? "Loading..." : "Reload VM catalog"}
                 </Button>
                 <span className="cost-form__hint">
-                  The table below mirrors the current `pricing_lookup_keys` and `pricing_snapshots` rows for VMs.
+                  Browse the cached VM catalog page by page. This mirrors the current `pricing_lookup_keys` and
+                  `pricing_snapshots` rows for VMs.
                 </span>
               </div>
             </Card>
 
             <Card className="cost-card cost-card--accent">
-              <span className="cost-card__eyebrow">Current VM rows</span>
-              {vmPrices.length === 0 && !loadingVmPrices ? (
+              <div className="cost-catalog__header">
+                <div>
+                  <span className="cost-card__eyebrow">Current VM rows</span>
+                  <h2>Paginated VM catalog</h2>
+                  <p>
+                    {vmCatalog
+                      ? `${vmCatalog.total_items} cached VM lookup keys across ${vmCatalog.total_pages} pages.`
+                      : "Load the catalog to inspect the currently cached VM rows."}
+                  </p>
+                </div>
+                {vmCatalog ? (
+                  <div className="cost-catalog__stats">
+                    <div>
+                      <strong>{vmCatalog.total_items}</strong>
+                      <span>Total rows</span>
+                    </div>
+                    <div>
+                      <strong>{vmCatalog.page}</strong>
+                      <span>Current page</span>
+                    </div>
+                    <div>
+                      <strong>{vmCatalog.page_size}</strong>
+                      <span>Page size</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {vmCatalog && vmCatalog.items.length === 0 && !loadingVmPrices ? (
                 <EmptyState
                   title="No VM prices cached"
                   description="Run the VM refresh job first to populate the catalog."
                 />
               ) : (
-                <div className="table-scroll">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>VM type</th>
-                        <th>Region</th>
-                        <th>Meter</th>
-                        <th>Price</th>
-                        <th>Updated</th>
-                        <th>Snapshots</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {vmPrices.map((item) => (
-                        <tr key={item.lookup_key.id}>
-                          <td>
-                            <strong>{item.lookup_key.arm_sku ?? item.lookup_key.meter_name ?? "Unknown"}</strong>
-                            <div>{item.lookup_key.product_name ?? item.lookup_key.service_name}</div>
-                          </td>
-                          <td>{item.lookup_key.region ?? "n/a"}</td>
-                          <td>{item.lookup_key.meter_name ?? "n/a"}</td>
-                          <td>
-                            {item.current_snapshot
-                              ? `$${Number(item.current_snapshot.unit_price).toFixed(6)} / ${
-                                  item.current_snapshot.unit_of_measure ?? "unit"
-                                }`
-                              : "n/a"}
-                          </td>
-                          <td>{item.current_snapshot ? formatDate(item.current_snapshot.fetched_at) : "n/a"}</td>
-                          <td>{item.snapshot_count}</td>
+                <>
+                  <div className="table-scroll">
+                    <table className="table cost-catalog__table">
+                      <thead>
+                        <tr>
+                          <th>VM type</th>
+                          <th>Region</th>
+                          <th>Meter</th>
+                          <th>Price</th>
+                          <th>Updated</th>
+                          <th>Snapshots</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {(vmCatalog?.items ?? []).map((item) => (
+                          <tr key={item.lookup_key.id}>
+                            <td>
+                              <strong>{item.lookup_key.arm_sku ?? item.lookup_key.meter_name ?? "Unknown"}</strong>
+                              <div>{item.lookup_key.product_name ?? item.lookup_key.service_name}</div>
+                            </td>
+                            <td>{item.lookup_key.region ?? "n/a"}</td>
+                            <td>{item.lookup_key.meter_name ?? "n/a"}</td>
+                            <td>
+                              {item.current_snapshot
+                                ? `$${Number(item.current_snapshot.unit_price).toFixed(6)} / ${
+                                    item.current_snapshot.unit_of_measure ?? "unit"
+                                  }`
+                                : "n/a"}
+                            </td>
+                            <td>{item.current_snapshot ? formatDate(item.current_snapshot.fetched_at) : "n/a"}</td>
+                            <td>{item.snapshot_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {vmCatalog && vmCatalog.total_pages > 1 ? (
+                    <div className="cost-catalog__pagination" aria-label="VM catalog pagination">
+                      <Button
+                        onClick={() => handleVmCatalogPageChange(Math.max(1, vmCatalog.page - 1))}
+                        disabled={loadingVmPrices || vmCatalog.page === 1}
+                        variant="secondary"
+                      >
+                        Previous
+                      </Button>
+                      <div className="cost-catalog__pages" role="navigation" aria-label="VM catalog pages">
+                        {Array.from({ length: vmCatalog.total_pages }, (_, index) => index + 1).map((page) => (
+                          <button
+                            key={page}
+                            type="button"
+                            className={[
+                              "cost-catalog__page",
+                              page === vmCatalog.page ? "cost-catalog__page--active" : ""
+                            ].join(" ")}
+                            onClick={() => handleVmCatalogPageChange(page)}
+                            disabled={loadingVmPrices}
+                            aria-current={page === vmCatalog.page ? "page" : undefined}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={() => handleVmCatalogPageChange(Math.min(vmCatalog.total_pages, vmCatalog.page + 1))}
+                        disabled={loadingVmPrices || vmCatalog.page === vmCatalog.total_pages}
+                        variant="secondary"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
               )}
             </Card>
           </div>

@@ -426,6 +426,101 @@ button, input { font: inherit; }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { padding: 14px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+
+.cost-catalog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.cost-catalog__header h2 {
+  margin-top: 8px;
+}
+
+.cost-catalog__header p {
+  max-width: 68ch;
+}
+
+.cost-catalog__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr));
+  gap: 10px;
+  min-width: min(100%, 340px);
+}
+
+.cost-catalog__stats div {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.cost-catalog__stats strong {
+  font-size: 1.18rem;
+  color: var(--text);
+}
+
+.cost-catalog__stats span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.cost-catalog__table thead th {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(239, 246, 255, 0.9));
+  z-index: 1;
+}
+
+.cost-catalog__pagination {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cost-catalog__pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cost-catalog__page {
+  min-width: 42px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(18, 38, 68, 0.05);
+}
+
+.cost-catalog__page--active {
+  background: linear-gradient(135deg, var(--brand), #0ea5e9);
+  color: #fff;
+  border-color: transparent;
+}
+
+.cost-catalog__page:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.cost-catalog__page:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
 .approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .approval-reason-input { min-width: 220px; }
 

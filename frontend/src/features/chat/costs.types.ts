@@ -126,6 +126,14 @@ export type VmPriceOverview = {
   snapshot_count: number;
 };
 
+export type VmPriceCatalog = {
+  items: VmPriceOverview[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
+
 export type CostEstimateCreateRequest = {
   raw_input: string;
   normalized_request: Record<string, unknown>;

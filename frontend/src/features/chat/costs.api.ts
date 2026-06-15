@@ -6,7 +6,7 @@ import type {
   CostResolutionRequest,
   CostResolutionResult,
   PriceRefreshRun,
-  VmPriceOverview
+  VmPriceCatalog
 } from "./costs.types";
 
 export function analyzeCostRequest(payload: { raw_input: string }) {
@@ -44,6 +44,6 @@ export function refreshVmPrices() {
   });
 }
 
-export function listVmPrices() {
-  return request<VmPriceOverview[]>("/costs/vm-prices");
+export function listVmPrices(page = 1, pageSize = 10) {
+  return request<VmPriceCatalog>(`/costs/vm-prices?page=${page}&page_size=${pageSize}`);
 }

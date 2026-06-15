@@ -188,52 +188,111 @@ describe("AzureResourceCostsPage", () => {
 
   it("lists cached VM prices from the catalog tab", async () => {
     listCostEstimatesMock.mockResolvedValueOnce([]);
-    listVmPricesMock.mockResolvedValueOnce([
-      {
-        lookup_key: {
-          id: 12,
-          service_name: "Virtual Machines",
-          arm_sku: "Standard_B4ms",
-          meter_name: "B4ms",
-          product_name: "Virtual Machines Bsv2 Series",
-          region: "eastus",
-          currency_code: "USD",
-          unit_of_measure: "1 Hour",
-          tier: "Standard",
-          normalized_key: "vm-key",
-          is_active: true,
-          last_checked_at: "2026-06-15T10:12:05Z",
-          last_refresh_at: "2026-06-15T10:12:05Z",
-          last_snapshot_id: 51
-        },
-        current_snapshot: {
-          id: 51,
-          lookup_key_id: 12,
-          source: "azure_retail_prices_api",
-          source_item_id: "vm-row-001",
-          sku_name: "Standard_B4ms",
-          product_name: "Virtual Machines Bsv2 Series",
-          meter_name: "B4ms",
-          region: "eastus",
-          currency_code: "USD",
-          unit_of_measure: "1 Hour",
-          price_type: "Consumption",
-          retail_price: 0.08,
-          unit_price: 0.08,
-          effective_start: null,
-          effective_end: null,
-          fetched_at: "2026-06-15T10:12:05Z",
-          valid_from: null,
-          valid_to: null,
-          is_current: true,
-          payload_hash: "hash-vm-snapshot",
-          raw_payload: {},
-          api_url: "https://prices.azure.com/api/retail/prices",
-          request_params: null
-        },
-        snapshot_count: 1
-      }
-    ]);
+    listVmPricesMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            lookup_key: {
+              id: 12,
+              service_name: "Virtual Machines",
+              arm_sku: "Standard_B4ms",
+              meter_name: "B4ms",
+              product_name: "Virtual Machines Bsv2 Series",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 Hour",
+              tier: "Standard",
+              normalized_key: "vm-key",
+              is_active: true,
+              last_checked_at: "2026-06-15T10:12:05Z",
+              last_refresh_at: "2026-06-15T10:12:05Z",
+              last_snapshot_id: 51
+            },
+            current_snapshot: {
+              id: 51,
+              lookup_key_id: 12,
+              source: "azure_retail_prices_api",
+              source_item_id: "vm-row-001",
+              sku_name: "Standard_B4ms",
+              product_name: "Virtual Machines Bsv2 Series",
+              meter_name: "B4ms",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 Hour",
+              price_type: "Consumption",
+              retail_price: 0.08,
+              unit_price: 0.08,
+              effective_start: null,
+              effective_end: null,
+              fetched_at: "2026-06-15T10:12:05Z",
+              valid_from: null,
+              valid_to: null,
+              is_current: true,
+              payload_hash: "hash-vm-snapshot",
+              raw_payload: {},
+              api_url: "https://prices.azure.com/api/retail/prices",
+              request_params: null
+            },
+            snapshot_count: 1
+          }
+        ],
+        page: 1,
+        page_size: 8,
+        total_items: 17,
+        total_pages: 3
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            lookup_key: {
+              id: 18,
+              service_name: "Virtual Machines",
+              arm_sku: "Standard_D4s_v5",
+              meter_name: "D4s v5",
+              product_name: "Virtual Machines Dsv5 Series",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 Hour",
+              tier: "Standard",
+              normalized_key: "vm-key-2",
+              is_active: true,
+              last_checked_at: "2026-06-15T11:12:05Z",
+              last_refresh_at: "2026-06-15T11:12:05Z",
+              last_snapshot_id: 62
+            },
+            current_snapshot: {
+              id: 62,
+              lookup_key_id: 18,
+              source: "azure_retail_prices_api",
+              source_item_id: "vm-row-002",
+              sku_name: "Standard_D4s_v5",
+              product_name: "Virtual Machines Dsv5 Series",
+              meter_name: "D4s v5",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 Hour",
+              price_type: "Consumption",
+              retail_price: 0.12,
+              unit_price: 0.12,
+              effective_start: null,
+              effective_end: null,
+              fetched_at: "2026-06-15T11:12:05Z",
+              valid_from: null,
+              valid_to: null,
+              is_current: true,
+              payload_hash: "hash-vm-snapshot-2",
+              raw_payload: {},
+              api_url: "https://prices.azure.com/api/retail/prices",
+              request_params: null
+            },
+            snapshot_count: 2
+          }
+        ],
+        page: 2,
+        page_size: 8,
+        total_items: 17,
+        total_pages: 3
+      });
 
     render(<AzureResourceCostsPage />);
 
@@ -244,6 +303,16 @@ describe("AzureResourceCostsPage", () => {
     expect(await screen.findByRole("heading", { name: /Cached VM types in Postgres/i })).toBeInTheDocument();
     expect(await screen.findByText(/Standard_B4ms/i)).toBeInTheDocument();
     expect(screen.getByText(/0.080000 \/ 1 Hour/i)).toBeInTheDocument();
-    expect(listVmPricesMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /^2$/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^2$/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Standard_D4s_v5/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/0.120000 \/ 1 Hour/i)).toBeInTheDocument();
+    expect(listVmPricesMock).toHaveBeenNthCalledWith(1, 1, 8);
+    expect(listVmPricesMock).toHaveBeenNthCalledWith(2, 2, 8);
   });
 });

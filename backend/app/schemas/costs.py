@@ -200,3 +200,11 @@ class VmPriceOverviewResponse(BaseModel):
     lookup_key: PricingLookupKeyResponse
     current_snapshot: PricingSnapshotResponse | None = None
     snapshot_count: int = 0
+
+
+class VmPriceCatalogResponse(BaseModel):
+    items: list[VmPriceOverviewResponse] = Field(default_factory=list)
+    page: int = 1
+    page_size: int = 10
+    total_items: int = 0
+    total_pages: int = 0

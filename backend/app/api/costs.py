@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_app_user
@@ -25,6 +26,7 @@ from app.schemas.costs import PricingSnapshotIngestRequest
 from app.schemas.costs import PricingSnapshotResponse
 from app.schemas.costs import CostResolutionRequest
 from app.schemas.costs import CostResolutionResponse
+from app.schemas.costs import VmPriceCatalogResponse
 from app.schemas.costs import VmPriceOverviewResponse
 from app.services.price_cache_service import price_cache_service
 from app.services.cost_analysis_service import cost_analysis_service
@@ -340,23 +342,37 @@ async def refresh_all_vm_prices(
 
 @router.get(
     "/costs/vm-prices",
-    response_model=list[VmPriceOverviewResponse]
+    response_model=VmPriceCatalogResponse
 )
 async def list_vm_prices(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_app_user)
+    user: User = Depends(get_current_app_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100)
 ):
     _ = user
-    lookup_keys = (
+    base_query = (
         db.query(PricingLookupKey)
         .filter(
             PricingLookupKey.service_name == "Virtual Machines",
             PricingLookupKey.is_active.is_(True)
         )
+    )
+    total_items = base_query.count()
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+
+    lookup_keys = (
+        base_query
         .order_by(PricingLookupKey.last_refresh_at.desc().nullslast(), PricingLookupKey.id.asc())
+        .offset(offset)
+        .limit(page_size)
         .all()
     )
-    return [
+
+    return VmPriceCatalogResponse(
+        items=[
         _vm_price_overview_to_response(
             lookup_key=lookup_key,
             snapshot=price_cache_service.get_current_snapshot(
@@ -370,4 +386,9 @@ async def list_vm_prices(
             )
         )
         for lookup_key in lookup_keys
-    ]
+        ],
+        page=page,
+        page_size=page_size,
+        total_items=total_items,
+        total_pages=total_pages
+    )
