@@ -39,6 +39,10 @@ from app.api.chat import (
     router as chat_router
 )
 
+from app.api.costs import (
+    router as costs_router
+)
+
 
 from app.middleware.security import (
     SecurityHeadersMiddleware
@@ -60,7 +64,12 @@ from app.database.models import (
     ApprovalRequest,
     SessionMemory,
     AuditLog,
-    ApprovalActionLog
+    ApprovalActionLog,
+    PricingLookupKey,
+    PricingSnapshot,
+    PriceRefreshRun,
+    CostEstimate,
+    CostEstimateLine
 )
 
 from app.mcp.client import azure_mcp_client
@@ -282,6 +291,11 @@ app.include_router(
 
 app.include_router(
     chat_router,
+    prefix="/api/v1"
+)
+
+app.include_router(
+    costs_router,
     prefix="/api/v1"
 )
 

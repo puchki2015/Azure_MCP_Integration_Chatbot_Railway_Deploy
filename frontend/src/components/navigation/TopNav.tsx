@@ -18,7 +18,7 @@ export function TopNav() {
           <NavLink to="/chat" className={navLinkClass}>
             Chat
           </NavLink>
-          <NavLink to="/costs" target="_blank" rel="noreferrer">
+          <NavLink to="/costs" className={navLinkClass}>
             Cost of your resources
           </NavLink>
           <NavLink to="/approvals" className={navLinkClass}>
