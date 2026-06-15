@@ -196,15 +196,23 @@ class PriceRefreshRunResponse(BaseModel):
     refresh_metadata: dict[str, Any] | None = None
 
 
-class VmPriceOverviewResponse(BaseModel):
+class PricingCatalogItemResponse(BaseModel):
     lookup_key: PricingLookupKeyResponse
     current_snapshot: PricingSnapshotResponse | None = None
     snapshot_count: int = 0
 
 
-class VmPriceCatalogResponse(BaseModel):
-    items: list[VmPriceOverviewResponse] = Field(default_factory=list)
+class PricingCatalogResponse(BaseModel):
+    items: list[PricingCatalogItemResponse] = Field(default_factory=list)
     page: int = 1
     page_size: int = 10
     total_items: int = 0
     total_pages: int = 0
+
+
+class VmPriceOverviewResponse(PricingCatalogItemResponse):
+    pass
+
+
+class VmPriceCatalogResponse(PricingCatalogResponse):
+    pass

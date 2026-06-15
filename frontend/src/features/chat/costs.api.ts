@@ -6,7 +6,8 @@ import type {
   CostResolutionRequest,
   CostResolutionResult,
   PriceRefreshRun,
-  VmPriceCatalog
+  PriceCatalog,
+  PriceCatalogService
 } from "./costs.types";
 
 export function analyzeCostRequest(payload: { raw_input: string }) {
@@ -44,6 +45,19 @@ export function refreshVmPrices() {
   });
 }
 
+export function listPriceCatalog(serviceName: PriceCatalogService, page = 1, pageSize = 10) {
+  const params = new URLSearchParams({
+    service_name: serviceName,
+    page: String(page),
+    page_size: String(pageSize)
+  });
+  return request<PriceCatalog>(`/costs/catalog?${params.toString()}`);
+}
+
 export function listVmPrices(page = 1, pageSize = 10) {
-  return request<VmPriceCatalog>(`/costs/vm-prices?page=${page}&page_size=${pageSize}`);
+  return request<PriceCatalog>(`/costs/vm-prices?page=${page}&page_size=${pageSize}`);
+}
+
+export function listSqlPrices(page = 1, pageSize = 10) {
+  return request<PriceCatalog>(`/costs/sql-prices?page=${page}&page_size=${pageSize}`);
 }

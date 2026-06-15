@@ -6,14 +6,14 @@ const listCostEstimatesMock = vi.fn();
 const analyzeCostRequestMock = vi.fn();
 const resolveCostRequestMock = vi.fn();
 const refreshVmPricesMock = vi.fn();
-const listVmPricesMock = vi.fn();
+const listPriceCatalogMock = vi.fn();
 
 vi.mock("./costs.api", () => ({
   analyzeCostRequest: (...args: unknown[]) => analyzeCostRequestMock(...args),
   listCostEstimates: (...args: unknown[]) => listCostEstimatesMock(...args),
+  listPriceCatalog: (...args: unknown[]) => listPriceCatalogMock(...args),
   resolveCostRequest: (...args: unknown[]) => resolveCostRequestMock(...args),
-  refreshVmPrices: (...args: unknown[]) => refreshVmPricesMock(...args),
-  listVmPrices: (...args: unknown[]) => listVmPricesMock(...args)
+  refreshVmPrices: (...args: unknown[]) => refreshVmPricesMock(...args)
 }));
 
 describe("AzureResourceCostsPage", () => {
@@ -22,7 +22,7 @@ describe("AzureResourceCostsPage", () => {
     analyzeCostRequestMock.mockReset();
     resolveCostRequestMock.mockReset();
     refreshVmPricesMock.mockReset();
-    listVmPricesMock.mockReset();
+    listPriceCatalogMock.mockReset();
   });
 
   it("asks for confirmation before pricing and then saves the estimate after selection", async () => {
@@ -30,7 +30,8 @@ describe("AzureResourceCostsPage", () => {
       id: 42,
       user_id: 7,
       source_session_id: 38,
-      raw_input: "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.",
+      raw_input:
+        "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.",
       normalized_request: {
         normalized_text:
           "provide me the cost estimates for 100 vms in eastus location of size b4ms and 2 azure sql database with minimum configuration"
@@ -69,9 +70,7 @@ describe("AzureResourceCostsPage", () => {
       ]
     };
 
-    listCostEstimatesMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([pricedEstimate]);
+    listCostEstimatesMock.mockResolvedValueOnce([]).mockResolvedValueOnce([pricedEstimate]);
 
     analyzeCostRequestMock.mockResolvedValueOnce({
       raw_input: pricedEstimate.raw_input,
@@ -186,9 +185,9 @@ describe("AzureResourceCostsPage", () => {
     expect(refreshVmPricesMock).toHaveBeenCalledTimes(1);
   });
 
-  it("lists cached VM prices from the catalog tab", async () => {
+  it("lists VM and SQL catalogs with bottom pagination", async () => {
     listCostEstimatesMock.mockResolvedValueOnce([]);
-    listVmPricesMock
+    listPriceCatalogMock
       .mockResolvedValueOnce({
         items: [
           {
@@ -292,6 +291,58 @@ describe("AzureResourceCostsPage", () => {
         page_size: 8,
         total_items: 17,
         total_pages: 3
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            lookup_key: {
+              id: 25,
+              service_name: "Azure SQL Database",
+              arm_sku: null,
+              meter_name: "General Purpose",
+              product_name: "Azure SQL Database",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 vCore Hour",
+              tier: "General Purpose",
+              normalized_key: "sql-key",
+              is_active: true,
+              last_checked_at: "2026-06-15T12:12:05Z",
+              last_refresh_at: "2026-06-15T12:12:05Z",
+              last_snapshot_id: 71
+            },
+            current_snapshot: {
+              id: 71,
+              lookup_key_id: 25,
+              source: "azure_retail_prices_api",
+              source_item_id: "sql-row-001",
+              sku_name: null,
+              product_name: "Azure SQL Database",
+              meter_name: "General Purpose",
+              region: "eastus",
+              currency_code: "USD",
+              unit_of_measure: "1 vCore Hour",
+              price_type: "Consumption",
+              retail_price: 0.06,
+              unit_price: 0.06,
+              effective_start: null,
+              effective_end: null,
+              fetched_at: "2026-06-15T12:12:05Z",
+              valid_from: null,
+              valid_to: null,
+              is_current: true,
+              payload_hash: "hash-sql-snapshot",
+              raw_payload: {},
+              api_url: "https://prices.azure.com/api/retail/prices",
+              request_params: null
+            },
+            snapshot_count: 1
+          }
+        ],
+        page: 1,
+        page_size: 8,
+        total_items: 4,
+        total_pages: 1
       });
 
     render(<AzureResourceCostsPage />);
@@ -300,10 +351,11 @@ describe("AzureResourceCostsPage", () => {
 
     fireEvent.click(screen.getAllByRole("tab", { name: /VM catalog/i })[0]);
 
-    expect(await screen.findByRole("heading", { name: /Cached VM types in Postgres/i })).toBeInTheDocument();
-    expect(await screen.findByText(/Standard_B4ms/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Cached VM and SQL Database prices/i })).toBeInTheDocument();
+    expect(screen.getByText(/Standard_B4ms/i)).toBeInTheDocument();
     expect(screen.getByText(/0.080000 \/ 1 Hour/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^2$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /SQL Database/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^2$/ }));
 
@@ -312,7 +364,15 @@ describe("AzureResourceCostsPage", () => {
     });
 
     expect(screen.getByText(/0.120000 \/ 1 Hour/i)).toBeInTheDocument();
-    expect(listVmPricesMock).toHaveBeenNthCalledWith(1, 1, 8);
-    expect(listVmPricesMock).toHaveBeenNthCalledWith(2, 2, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: /SQL Database/i }));
+
+    await waitFor(() => {
+      expect(listPriceCatalogMock).toHaveBeenNthCalledWith(3, "Azure SQL Database", 1, 8);
+    });
+
+    expect(screen.getByText(/0.060000 \/ 1 vCore Hour/i)).toBeInTheDocument();
+    expect(listPriceCatalogMock).toHaveBeenNthCalledWith(1, "Virtual Machines", 1, 8);
+    expect(listPriceCatalogMock).toHaveBeenNthCalledWith(2, "Virtual Machines", 2, 8);
   });
 });

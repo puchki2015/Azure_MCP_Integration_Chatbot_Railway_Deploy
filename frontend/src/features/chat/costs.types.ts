@@ -126,13 +126,17 @@ export type VmPriceOverview = {
   snapshot_count: number;
 };
 
-export type VmPriceCatalog = {
-  items: VmPriceOverview[];
+export type PriceCatalogItem = VmPriceOverview;
+
+export type PriceCatalog = {
+  items: PriceCatalogItem[];
   page: number;
   page_size: number;
   total_items: number;
   total_pages: number;
 };
+
+export type PriceCatalogService = "Virtual Machines" | "Azure SQL Database";
 
 export type CostEstimateCreateRequest = {
   raw_input: string;

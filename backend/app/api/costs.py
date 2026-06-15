@@ -22,11 +22,11 @@ from app.schemas.costs import CostEstimateResponse
 from app.schemas.costs import PriceRefreshRunCreateRequest
 from app.schemas.costs import PriceRefreshRunResponse
 from app.schemas.costs import PricingLookupKeyResponse
+from app.schemas.costs import PricingCatalogResponse
 from app.schemas.costs import PricingSnapshotIngestRequest
 from app.schemas.costs import PricingSnapshotResponse
 from app.schemas.costs import CostResolutionRequest
 from app.schemas.costs import CostResolutionResponse
-from app.schemas.costs import VmPriceCatalogResponse
 from app.schemas.costs import VmPriceOverviewResponse
 from app.services.price_cache_service import price_cache_service
 from app.services.cost_analysis_service import cost_analysis_service
@@ -72,6 +72,55 @@ def _vm_price_overview_to_response(
         lookup_key=_lookup_to_response(lookup_key),
         current_snapshot=_snapshot_to_response(snapshot) if snapshot else None,
         snapshot_count=snapshot_count
+    )
+
+
+def _list_price_catalog(
+    db: Session,
+    service_name: str,
+    page: int,
+    page_size: int
+) -> PricingCatalogResponse:
+    base_query = (
+        db.query(PricingLookupKey)
+        .filter(
+            PricingLookupKey.service_name == service_name,
+            PricingLookupKey.is_active.is_(True)
+        )
+    )
+    total_items = base_query.count()
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+
+    lookup_keys = (
+        base_query
+        .order_by(PricingLookupKey.last_refresh_at.desc().nullslast(), PricingLookupKey.id.asc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    return PricingCatalogResponse(
+        items=[
+            _vm_price_overview_to_response(
+                lookup_key=lookup_key,
+                snapshot=price_cache_service.get_current_snapshot(
+                    db=db,
+                    lookup_key_id=lookup_key.id
+                ),
+                snapshot_count=(
+                    db.query(PricingSnapshot)
+                    .filter(PricingSnapshot.lookup_key_id == lookup_key.id)
+                    .count()
+                )
+            )
+            for lookup_key in lookup_keys
+        ],
+        page=page,
+        page_size=page_size,
+        total_items=total_items,
+        total_pages=total_pages
     )
 
 
@@ -342,7 +391,7 @@ async def refresh_all_vm_prices(
 
 @router.get(
     "/costs/vm-prices",
-    response_model=VmPriceCatalogResponse
+    response_model=PricingCatalogResponse
 )
 async def list_vm_prices(
     db: Session = Depends(get_db),
@@ -351,44 +400,48 @@ async def list_vm_prices(
     page_size: int = Query(10, ge=1, le=100)
 ):
     _ = user
-    base_query = (
-        db.query(PricingLookupKey)
-        .filter(
-            PricingLookupKey.service_name == "Virtual Machines",
-            PricingLookupKey.is_active.is_(True)
-        )
-    )
-    total_items = base_query.count()
-    total_pages = max(1, (total_items + page_size - 1) // page_size)
-    page = min(page, total_pages)
-    offset = (page - 1) * page_size
-
-    lookup_keys = (
-        base_query
-        .order_by(PricingLookupKey.last_refresh_at.desc().nullslast(), PricingLookupKey.id.asc())
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
-
-    return VmPriceCatalogResponse(
-        items=[
-        _vm_price_overview_to_response(
-            lookup_key=lookup_key,
-            snapshot=price_cache_service.get_current_snapshot(
-                db=db,
-                lookup_key_id=lookup_key.id
-            ),
-            snapshot_count=(
-                db.query(PricingSnapshot)
-                .filter(PricingSnapshot.lookup_key_id == lookup_key.id)
-                .count()
-            )
-        )
-        for lookup_key in lookup_keys
-        ],
+    return _list_price_catalog(
+        db=db,
+        service_name="Virtual Machines",
         page=page,
-        page_size=page_size,
-        total_items=total_items,
-        total_pages=total_pages
+        page_size=page_size
+    )
+
+
+@router.get(
+    "/costs/sql-prices",
+    response_model=PricingCatalogResponse
+)
+async def list_sql_prices(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_app_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100)
+):
+    _ = user
+    return _list_price_catalog(
+        db=db,
+        service_name="Azure SQL Database",
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get(
+    "/costs/catalog",
+    response_model=PricingCatalogResponse
+)
+async def list_pricing_catalog(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_app_user),
+    service_name: str = Query("Virtual Machines"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100)
+):
+    _ = user
+    return _list_price_catalog(
+        db=db,
+        service_name=service_name,
+        page=page,
+        page_size=page_size
     )
