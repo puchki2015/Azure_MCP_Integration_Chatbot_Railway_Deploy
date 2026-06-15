@@ -2,28 +2,23 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { Input } from "../../components/ui/Input";
 import { Spinner } from "../../components/ui/Spinner";
 import { formatDate } from "../../utils/formatDate";
-import { createCostEstimate, listCostEstimates } from "./costs.api";
-import type { CostEstimate } from "./costs.types";
+import { analyzeCostRequest, listCostEstimates, resolveCostRequest } from "./costs.api";
+import type { CostAnalysis, CostEstimate } from "./costs.types";
 
-const defaultRawInput = "Estimate the cost for a single Azure VM in West US.";
+const defaultRawInput =
+  "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.";
 
 export function AzureResourceCostsPage() {
   const [rawInput, setRawInput] = useState(defaultRawInput);
-  const [resourceType, setResourceType] = useState("Virtual Machine");
-  const [resourceName, setResourceName] = useState("prod-vm-01");
-  const [region, setRegion] = useState("westus");
-  const [currencyCode, setCurrencyCode] = useState("USD");
-  const [quantity, setQuantity] = useState("1");
-  const [unitName, setUnitName] = useState("hour");
-  const [hourlyRate, setHourlyRate] = useState("0.12");
-  const [monthlyRate, setMonthlyRate] = useState("87.60");
+  const [analysis, setAnalysis] = useState<CostAnalysis | null>(null);
+  const [selections, setSelections] = useState<Record<string, string>>({});
   const [estimates, setEstimates] = useState<CostEstimate[]>([]);
   const [activeEstimate, setActiveEstimate] = useState<CostEstimate | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadEstimates = async () => {
@@ -62,59 +57,60 @@ export function AzureResourceCostsPage() {
     };
   }, []);
 
-  const handleSubmit = async () => {
+  const runAnalysis = async () => {
     if (!rawInput.trim()) {
+      setError("Enter a request before analyzing it.");
       return;
     }
 
-    setSaving(true);
+    setAnalyzing(true);
+    setResolving(false);
     setError(null);
 
     try {
-      const estimate = await createCostEstimate({
+      const result = await analyzeCostRequest({ raw_input: rawInput.trim() });
+      setAnalysis(result);
+      setSelections({});
+
+      if (!result.needs_confirmation && result.ready_to_price) {
+        await runResolution({});
+      }
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "Failed to analyze the request");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const runResolution = async (providedSelections?: Record<string, string>) => {
+    setResolving(true);
+    setError(null);
+
+    try {
+      const result = await resolveCostRequest({
         raw_input: rawInput.trim(),
-        normalized_request: {
-          text: rawInput.trim(),
-          resource_type: resourceType,
-          region,
-          quantity: Number(quantity),
-          unit_name: unitName
-        },
-        region,
-        currency_code: currencyCode.toUpperCase(),
-        confidence: "manual",
-        assumptions: {
-          entry_mode: "manual",
-          pricing_source: "local_postgres_cache"
-        },
-        lines: [
-          {
-            resource_type: resourceType,
-            resource_name: resourceName,
-            quantity: Number(quantity),
-            unit_name: unitName,
-            hourly_rate: Number(hourlyRate),
-            monthly_rate: Number(monthlyRate),
-            lookup_key: {
-              service_name: resourceType,
-              meter_name: unitName,
-              region,
-              currency_code: currencyCode.toUpperCase(),
-              unit_of_measure: unitName
-            },
-            matched_exactly: false,
-            match_confidence: "manual"
-          }
-        ]
+        selections: providedSelections ?? selections
       });
 
-      setActiveEstimate(estimate);
+      if (result.kind === "analysis") {
+        setAnalysis(result.analysis);
+        return;
+      }
+
+      setActiveEstimate(result.estimate);
       await loadEstimates();
     } catch (ex) {
-      setError(ex instanceof Error ? ex.message : "Failed to save cost estimate");
+      setError(ex instanceof Error ? ex.message : "Failed to generate the estimate");
     } finally {
-      setSaving(false);
+      setResolving(false);
     }
+  };
+
+  const handleSelectionChange = (fieldName: string, value: string) => {
+    setSelections((current) => ({
+      ...current,
+      [fieldName]: value
+    }));
   };
 
   if (loading) {
@@ -131,79 +127,122 @@ export function AzureResourceCostsPage() {
       <section className="cost-page__hero">
         <div className="cost-page__badge">
           <span className="cost-page__badge-dot" />
-          Live estimate storage
+          Analyze-first cost flow
         </div>
         <h1>
           Cost of your <span>Azure resources</span>
         </h1>
         <p className="cost-page__lead">
-          Create a cost estimate, store it in Railway Postgres, and review the latest saved totals without leaving
-          the chat shell.
+          Describe the infrastructure you want. The backend will first analyze the request, ask for confirmation if
+          any pricing-critical field is unclear, and only then create the estimate from cached or live Azure pricing.
         </p>
 
         {error ? <div className="error-banner">{error}</div> : null}
 
         <div className="cost-page__cards">
           <Card className="cost-card">
-            <span className="cost-card__eyebrow">Estimate input</span>
-            <h2>Save a manual estimate</h2>
-            <p>These values are persisted as a cost estimate and linked to a lookup key for later pricing refreshes.</p>
+            <span className="cost-card__eyebrow">Request input</span>
+            <h2>Describe the workload</h2>
+            <p>
+              The system extracts resource intents from plain English, flags ambiguities, and shows suggested
+              options before pricing.
+            </p>
 
             <div className="cost-form">
               <label>
                 <span className="cost-form__label">Plain-English request</span>
                 <textarea
                   className="input cost-form__textarea"
-                  rows={4}
+                  rows={6}
                   value={rawInput}
                   onChange={(event) => setRawInput(event.target.value)}
                 />
               </label>
-              <div className="cost-form__grid">
-                <label>
-                  <span className="cost-form__label">Resource type</span>
-                  <Input value={resourceType} onChange={(event) => setResourceType(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Resource name</span>
-                  <Input value={resourceName} onChange={(event) => setResourceName(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Region</span>
-                  <Input value={region} onChange={(event) => setRegion(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Currency</span>
-                  <Input value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Quantity</span>
-                  <Input value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Unit</span>
-                  <Input value={unitName} onChange={(event) => setUnitName(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Hourly rate</span>
-                  <Input value={hourlyRate} onChange={(event) => setHourlyRate(event.target.value)} />
-                </label>
-                <label>
-                  <span className="cost-form__label">Monthly rate</span>
-                  <Input value={monthlyRate} onChange={(event) => setMonthlyRate(event.target.value)} />
-                </label>
-              </div>
 
               <div className="cost-form__actions">
-                <Button onClick={() => void handleSubmit()} disabled={saving}>
-                  {saving ? "Saving..." : "Save estimate"}
+                <Button onClick={() => void runAnalysis()} disabled={analyzing || resolving}>
+                  {analyzing ? "Analyzing..." : "Analyze request"}
                 </Button>
-                <span className="cost-form__hint">Stored in Postgres through the `/costs/estimates` endpoint.</span>
+                <span className="cost-form__hint">
+                  Clarifications are required before pricing ambiguous VM size, OS image, tier, or region inputs.
+                </span>
               </div>
             </div>
           </Card>
 
           <Card className="cost-card cost-card--accent">
+            <span className="cost-card__eyebrow">Current state</span>
+            {analysis ? (
+              <>
+                <h2>{analysis.needs_confirmation ? "Confirmation needed" : "Ready to price"}</h2>
+                <p>{analysis.normalized_text}</p>
+                <ul className="cost-page__list">
+                  {analysis.intents.map((intent, index) => (
+                    <li key={`${intent.resource_type}-${index}`}>
+                      {intent.resource_type}
+                      {intent.quantity ? ` × ${intent.quantity}` : ""}
+                      {intent.region ? ` in ${intent.region}` : ""}
+                      {intent.sku ? ` (${intent.sku})` : ""}
+                    </li>
+                  ))}
+                </ul>
+                {analysis.assumptions.length > 0 ? (
+                  <div className="cost-page__notes">
+                    {analysis.assumptions.map((assumption) => (
+                      <p key={assumption}>{assumption}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <EmptyState
+                title="No analysis yet"
+                description="Analyze a request to see whether the backend can price it immediately or needs confirmation."
+              />
+            )}
+          </Card>
+        </div>
+
+        {analysis?.clarification_items.length ? (
+          <Card className="cost-card">
+            <span className="cost-card__eyebrow">Clarifications</span>
+            <h2>Confirm the ambiguous fields</h2>
+            <p>Select a value for each field below. These values will be passed back to the backend before pricing.</p>
+
+            <div className="cost-form">
+              {analysis.clarification_items.map((item) => (
+                <label key={item.field_name} className="cost-form__field">
+                  <span className="cost-form__label">{item.message}</span>
+                  <select
+                    className="input"
+                    value={selections[item.field_name] ?? ""}
+                    onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
+                  >
+                    <option value="">Select one</option>
+                    {item.suggested_values.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+
+              <div className="cost-form__actions">
+                <Button
+                  onClick={() => void runResolution()}
+                  disabled={resolving || analysis.clarification_items.some((item) => !selections[item.field_name])}
+                >
+                  {resolving ? "Generating estimate..." : "Confirm and price"}
+                </Button>
+                <span className="cost-form__hint">No estimate is created until the clarifications are confirmed.</span>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="cost-page__cards">
+          <Card className="cost-card">
             <span className="cost-card__eyebrow">Latest estimate</span>
             {activeEstimate ? (
               <>
@@ -225,12 +264,10 @@ export function AzureResourceCostsPage() {
                 </small>
               </>
             ) : (
-              <EmptyState title="No estimates yet" description="Save one estimate to start building history." />
+              <EmptyState title="No estimates yet" description="Confirm a request to generate the first priced estimate." />
             )}
           </Card>
-        </div>
 
-        <div className="cost-page__cards">
           <Card className="cost-card">
             <span className="cost-card__eyebrow">History</span>
             <h2>Recently saved estimates</h2>
@@ -255,13 +292,24 @@ export function AzureResourceCostsPage() {
               </div>
             )}
           </Card>
+        </div>
 
+        <div className="cost-page__cards">
           <Card className="cost-card">
             <span className="cost-card__eyebrow">Storage model</span>
             <h2>What gets written</h2>
             <p>
-              Each saved estimate is persisted with raw input, normalized request JSON, line items, and the cached
-              lookup key needed for future pricing refreshes.
+              Analysis results stay in the request state until the user confirms. Once priced, the backend writes the
+              estimate, the line items, and the cached pricing snapshot that was used.
+            </p>
+          </Card>
+
+          <Card className="cost-card">
+            <span className="cost-card__eyebrow">Confirmation policy</span>
+            <h2>No silent assumptions</h2>
+            <p>
+              If the backend cannot confidently infer a pricing-critical field, it returns suggested values and waits
+              for your confirmation before calculating the estimate.
             </p>
           </Card>
         </div>

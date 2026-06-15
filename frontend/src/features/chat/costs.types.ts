@@ -20,6 +20,48 @@ export type CostEstimateLineInput = {
   assumptions?: Record<string, unknown>;
 };
 
+export type CostResourceIntent = {
+  resource_type: string;
+  quantity: number | null;
+  region: string | null;
+  sku: string | null;
+  os_image: string | null;
+  unit_name: string | null;
+  confidence: string;
+};
+
+export type CostClarificationItem = {
+  field_name: string;
+  message: string;
+  suggested_values: string[];
+};
+
+export type CostAnalysis = {
+  raw_input: string;
+  normalized_text: string;
+  intents: CostResourceIntent[];
+  needs_confirmation: boolean;
+  clarification_items: CostClarificationItem[];
+  assumptions: string[];
+  ready_to_price: boolean;
+};
+
+export type CostResolutionRequest = {
+  raw_input: string;
+  selections?: Record<string, string>;
+  source_session_id?: number;
+};
+
+export type CostResolutionResult =
+  | {
+      kind: "analysis";
+      analysis: CostAnalysis;
+    }
+  | {
+      kind: "estimate";
+      estimate: CostEstimate;
+    };
+
 export type CostEstimateCreateRequest = {
   raw_input: string;
   normalized_request: Record<string, unknown>;

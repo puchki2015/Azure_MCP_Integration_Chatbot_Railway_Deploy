@@ -1,0 +1,148 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AzureResourceCostsPage } from "./AzureResourceCostsPage";
+
+const listCostEstimatesMock = vi.fn();
+const analyzeCostRequestMock = vi.fn();
+const resolveCostRequestMock = vi.fn();
+
+vi.mock("./costs.api", () => ({
+  analyzeCostRequest: (...args: unknown[]) => analyzeCostRequestMock(...args),
+  listCostEstimates: (...args: unknown[]) => listCostEstimatesMock(...args),
+  resolveCostRequest: (...args: unknown[]) => resolveCostRequestMock(...args)
+}));
+
+describe("AzureResourceCostsPage", () => {
+  beforeEach(() => {
+    listCostEstimatesMock.mockReset();
+    analyzeCostRequestMock.mockReset();
+    resolveCostRequestMock.mockReset();
+  });
+
+  it("asks for confirmation before pricing and then saves the estimate after selection", async () => {
+    const pricedEstimate = {
+      id: 42,
+      user_id: 7,
+      source_session_id: 38,
+      raw_input: "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.",
+      normalized_request: {
+        normalized_text:
+          "provide me the cost estimates for 100 vms in eastus location of size b4ms and 2 azure sql database with minimum configuration"
+      },
+      region: "eastus",
+      currency_code: "USD",
+      status: "COMPLETE",
+      created_at: "2026-06-15T10:12:07Z",
+      updated_at: "2026-06-15T10:12:07Z",
+      total_hourly: 8.12,
+      total_monthly: 5927.6,
+      assumptions: {
+        clarification_selections: {
+          vm_size: "Standard_B4ms",
+          sql_tier: "General Purpose"
+        }
+      },
+      confidence: "confirmed",
+      lines: [
+        {
+          id: 88,
+          estimate_id: 42,
+          lookup_key_id: 12,
+          snapshot_id: 51,
+          resource_type: "Virtual Machine",
+          resource_name: "Standard_B4ms",
+          quantity: 100,
+          unit_name: "hour",
+          hourly_rate: 8,
+          monthly_rate: 5840,
+          matched_exactly: true,
+          match_confidence: "confirmed",
+          assumptions: null,
+          created_at: "2026-06-15T10:12:07Z"
+        }
+      ]
+    };
+
+    listCostEstimatesMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([pricedEstimate]);
+
+    analyzeCostRequestMock.mockResolvedValueOnce({
+      raw_input: pricedEstimate.raw_input,
+      normalized_text: pricedEstimate.normalized_request.normalized_text,
+      intents: [
+        {
+          resource_type: "Virtual Machine",
+          quantity: 100,
+          region: "eastus",
+          sku: "B4ms",
+          os_image: "ubuntu",
+          unit_name: "hour",
+          confidence: "low"
+        },
+        {
+          resource_type: "Azure SQL Database",
+          quantity: 2,
+          region: "eastus",
+          sku: "minimum",
+          os_image: null,
+          unit_name: "vCore Hour",
+          confidence: "low"
+        }
+      ],
+      needs_confirmation: true,
+      clarification_items: [
+        {
+          field_name: "vm_size",
+          message: "VM size is ambiguous. Please confirm the exact SKU you want priced.",
+          suggested_values: ["Standard_B4ms", "Standard_D4s_v5"]
+        },
+        {
+          field_name: "sql_tier",
+          message: "SQL Database configuration is ambiguous. Please confirm the tier or minimum configuration you want priced.",
+          suggested_values: ["General Purpose", "Business Critical"]
+        }
+      ],
+      assumptions: ["Detected ambiguous phrase: minimum configuration"],
+      ready_to_price: false
+    });
+
+    resolveCostRequestMock.mockResolvedValueOnce({
+      kind: "estimate",
+      estimate: pricedEstimate
+    });
+
+    render(<AzureResourceCostsPage />);
+
+    expect(await screen.findByText(/No estimates yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Analyze request/i }));
+
+    expect(await screen.findByText(/Confirmation needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confirm the ambiguous fields/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getAllByRole("combobox")[0], {
+      target: { value: "Standard_B4ms" }
+    });
+    fireEvent.change(screen.getAllByRole("combobox")[1], {
+      target: { value: "General Purpose" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm and price/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /Estimate #42/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Total: \$5927.60 \/ month/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Estimate #42/i)).toHaveLength(2);
+    expect(resolveCostRequestMock).toHaveBeenCalledWith({
+      raw_input:
+        "Provide me the cost estimates for 100 VMs in east us location of size B4ms and 2 Azure SQL database with minimum configuration.",
+      selections: {
+        vm_size: "Standard_B4ms",
+        sql_tier: "General Purpose"
+      }
+    });
+  });
+});

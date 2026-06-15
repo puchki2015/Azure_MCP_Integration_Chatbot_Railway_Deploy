@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -29,6 +30,55 @@ class CostEstimateCreateRequest(BaseModel):
     source_session_id: int | None = None
     user_id: int | None = None
     lines: list[CostEstimateLineInput] = Field(default_factory=list)
+
+
+class CostResourceIntent(BaseModel):
+    resource_type: str
+    quantity: float | None = None
+    region: str | None = None
+    sku: str | None = None
+    os_image: str | None = None
+    unit_name: str | None = None
+    confidence: str = "low"
+
+
+class CostClarificationItem(BaseModel):
+    field_name: str
+    message: str
+    suggested_values: list[str] = Field(default_factory=list)
+
+
+class CostAnalysisRequest(BaseModel):
+    raw_input: str
+
+
+class CostAnalysisResponse(BaseModel):
+    raw_input: str
+    normalized_text: str
+    intents: list[CostResourceIntent] = Field(default_factory=list)
+    needs_confirmation: bool = False
+    clarification_items: list[CostClarificationItem] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    ready_to_price: bool = False
+
+
+class CostResolutionRequest(BaseModel):
+    raw_input: str
+    selections: dict[str, str] = Field(default_factory=dict)
+    source_session_id: int | None = None
+
+
+class CostAnalysisEnvelope(BaseModel):
+    kind: Literal["analysis"] = "analysis"
+    analysis: CostAnalysisResponse
+
+
+class CostEstimateEnvelope(BaseModel):
+    kind: Literal["estimate"] = "estimate"
+    estimate: "CostEstimateResponse"
+
+
+CostResolutionResponse = CostAnalysisEnvelope | CostEstimateEnvelope
 
 
 class PricingSnapshotIngestRequest(BaseModel):

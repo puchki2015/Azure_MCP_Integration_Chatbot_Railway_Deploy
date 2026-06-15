@@ -12,14 +12,22 @@ from app.database.models import PriceRefreshRun
 from app.database.models import User
 from app.database.session import get_db
 from app.schemas.costs import CostEstimateCreateRequest
+from app.schemas.costs import CostAnalysisRequest
+from app.schemas.costs import CostAnalysisResponse
+from app.schemas.costs import CostAnalysisEnvelope
 from app.schemas.costs import CostEstimateLineResponse
+from app.schemas.costs import CostEstimateEnvelope
 from app.schemas.costs import CostEstimateResponse
 from app.schemas.costs import PriceRefreshRunCreateRequest
 from app.schemas.costs import PriceRefreshRunResponse
 from app.schemas.costs import PricingLookupKeyResponse
 from app.schemas.costs import PricingSnapshotIngestRequest
 from app.schemas.costs import PricingSnapshotResponse
+from app.schemas.costs import CostResolutionRequest
+from app.schemas.costs import CostResolutionResponse
 from app.services.price_cache_service import price_cache_service
+from app.services.cost_analysis_service import cost_analysis_service
+from app.services.cost_pricing_service import cost_pricing_service
 
 router = APIRouter(
     tags=["Costs"]
@@ -50,6 +58,45 @@ def _estimate_to_response(
 
 def _refresh_run_to_response(run: PriceRefreshRun) -> PriceRefreshRunResponse:
     return PriceRefreshRunResponse.model_validate(run)
+
+
+@router.post(
+    "/costs/analyze",
+    response_model=CostAnalysisResponse
+)
+async def analyze_cost_request(
+    request: CostAnalysisRequest,
+    user: User = Depends(get_current_app_user)
+):
+    _ = user
+    return cost_analysis_service.analyze(request.raw_input)
+
+
+@router.post(
+    "/costs/resolve",
+    response_model=CostResolutionResponse
+)
+async def resolve_cost_request(
+    request: CostResolutionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_app_user)
+):
+    analysis = cost_analysis_service.analyze(request.raw_input)
+    if analysis.needs_confirmation and not request.selections:
+        return CostAnalysisEnvelope(analysis=analysis)
+
+    _, estimate = cost_pricing_service.create_estimate_from_analysis(
+        db=db,
+        raw_input=request.raw_input,
+        analysis=analysis,
+        selections=request.selections,
+        user_id=user.id,
+        source_session_id=request.source_session_id
+    )
+    if estimate is None:
+        return CostAnalysisEnvelope(analysis=analysis)
+
+    return CostEstimateEnvelope(estimate=estimate)
 
 
 @router.post(
