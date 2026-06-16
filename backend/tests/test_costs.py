@@ -207,6 +207,43 @@ class CostCacheTests(unittest.TestCase):
         self.assertAlmostEqual(float(estimate.total_hourly), 0.16)
         self.assertAlmostEqual(float(estimate.total_monthly), 116.8)
 
+    def test_cost_pricing_service_retries_sql_queries_when_serverless_is_missing(self):
+        analysis = cost_analysis_service.analyze(
+            "Estimate 2 Azure SQL database serverless instances in east us"
+        )
+
+        best_item = {
+            "id": "sql-row-002",
+            "productName": "Azure SQL Database",
+            "meterName": "General Purpose",
+            "armRegionName": "eastus",
+            "currencyCode": "USD",
+            "unitOfMeasure": "1 vCore Hour",
+            "type": "Consumption",
+            "retailPrice": 0.06,
+            "unitPrice": 0.06
+        }
+
+        with patch(
+            "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
+            side_effect=[
+                (None, [], "https://prices.azure.com/api/retail/prices", {}),
+                (best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+            ]
+        ) as mocked_fetch:
+            _, estimate = cost_pricing_service.create_estimate_from_analysis(
+                db=self.db,
+                raw_input="Estimate 2 Azure SQL database serverless instances in east us",
+                analysis=analysis,
+                selections={"sql_tier": "Serverless"}
+            )
+
+        self.assertIsNotNone(estimate)
+        self.assertGreaterEqual(len(estimate.lines), 1)
+        self.assertAlmostEqual(float(estimate.total_hourly), 0.06)
+        self.assertAlmostEqual(float(estimate.total_monthly), 43.8)
+        self.assertGreaterEqual(mocked_fetch.call_count, 2)
+
     def test_refresh_all_vm_prices_updates_vm_lookup_keys(self):
         lookup = price_cache_service.get_or_create_lookup_key(
             db=self.db,

@@ -269,6 +269,73 @@ class CostPricingService:
             }
         )
 
+    def _sql_query_candidates(self, lookup: PricingLookupKey) -> list[RetailPriceQuery]:
+        region = lookup.region
+        currency_code = lookup.currency_code or "USD"
+        tier = lookup.tier or lookup.meter_name
+
+        candidates = [
+            RetailPriceQuery(
+                service_name="Azure SQL Database",
+                arm_region_name=region,
+                product_name=lookup.product_name or "Azure SQL Database",
+                meter_name=tier,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Azure SQL Database",
+                arm_region_name=region,
+                product_name=lookup.product_name or "Azure SQL Database",
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Azure SQL Database",
+                arm_region_name=region,
+                price_type="Consumption",
+                currency_code=currency_code
+            )
+        ]
+
+        deduped: list[RetailPriceQuery] = []
+        seen: set[tuple[Any, ...]] = set()
+        for candidate in candidates:
+            signature = (
+                candidate.service_name,
+                candidate.service_family,
+                candidate.arm_region_name,
+                candidate.arm_sku_name,
+                candidate.sku_name,
+                candidate.product_name,
+                candidate.meter_name,
+                candidate.price_type,
+                candidate.currency_code
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            deduped.append(candidate)
+        return deduped
+
+    def _fetch_best_sql_item(
+        self,
+        lookup: PricingLookupKey
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str, dict[str, Any]]:
+        last_items: list[dict[str, Any]] = []
+        last_api_url = "https://prices.azure.com/api/retail/prices"
+        last_request_params: dict[str, Any] = {}
+
+        for query in self._sql_query_candidates(lookup):
+            best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(query)
+            last_items = items
+            last_api_url = api_url
+            last_request_params = request_params
+            if best_item is not None:
+                return best_item, items, api_url, request_params
+
+        return None, last_items, last_api_url, last_request_params
+
     def _resolve_intent(
         self,
         intent: CostResourceIntent,
@@ -305,6 +372,8 @@ class CostPricingService:
         if snapshot is None or price_cache_service.should_refresh(lookup):
             if resolved.intent.resource_type.lower().startswith("virtual machine"):
                 best_item, items, api_url, request_params = self._fetch_best_vm_item(lookup)
+            elif "sql" in resolved.intent.resource_type.lower():
+                best_item, items, api_url, request_params = self._fetch_best_sql_item(lookup)
             else:
                 best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(
                     resolved.query

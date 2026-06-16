@@ -343,6 +343,13 @@ describe("AzureResourceCostsPage", () => {
         page_size: 8,
         total_items: 4,
         total_pages: 1
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        page_size: 8,
+        total_items: 0,
+        total_pages: 1
       });
 
     render(<AzureResourceCostsPage />);
@@ -375,5 +382,13 @@ describe("AzureResourceCostsPage", () => {
     expect(screen.getByText(/0.060000 \/ 1 vCore Hour/i)).toBeInTheDocument();
     expect(listPriceCatalogMock).toHaveBeenNthCalledWith(1, "Virtual Machines", 1, 8);
     expect(listPriceCatalogMock).toHaveBeenNthCalledWith(2, "Virtual Machines", 2, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: /MySQL/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/No cached rows/i)).toBeInTheDocument();
+    });
+
+    expect(listPriceCatalogMock).toHaveBeenNthCalledWith(4, "Azure Database for MySQL", 1, 8);
   });
 });

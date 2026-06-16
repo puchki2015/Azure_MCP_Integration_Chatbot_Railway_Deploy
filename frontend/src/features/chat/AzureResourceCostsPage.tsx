@@ -14,7 +14,8 @@ type CostsTab = "estimate" | "refresh" | "catalog";
 
 const catalogServices: Array<{ label: string; value: PriceCatalogService }> = [
   { label: "VMs", value: "Virtual Machines" },
-  { label: "SQL Database", value: "Azure SQL Database" }
+  { label: "SQL Database", value: "Azure SQL Database" },
+  { label: "MySQL", value: "Azure Database for MySQL" }
 ];
 
 type PagerItem = number | "ellipsis";
@@ -532,7 +533,14 @@ export function AzureResourceCostsPage() {
                     {loadingCatalog ? "Loading..." : "Reload catalog"}
                   </Button>
                   <span className="cost-form__hint">
-                    Showing {catalogService === "Virtual Machines" ? "VM" : "SQL Database"} pricing cached in Postgres.
+                    Showing{" "}
+                    {catalogService === "Virtual Machines"
+                      ? "VM"
+                      : catalogService === "Azure SQL Database"
+                        ? "SQL Database"
+                        : "MySQL"}
+                    {" "}
+                    pricing cached in Postgres.
                   </span>
                 </div>
               </div>
@@ -540,7 +548,13 @@ export function AzureResourceCostsPage() {
               {catalog && catalog.items.length === 0 && !loadingCatalog ? (
                 <EmptyState
                   title="No cached rows"
-                  description={`Run the ${catalogService === "Virtual Machines" ? "VM" : "SQL Database"} refresh job first to populate this catalog.`}
+                  description={`Run the ${
+                    catalogService === "Virtual Machines"
+                      ? "VM"
+                      : catalogService === "Azure SQL Database"
+                        ? "SQL Database"
+                        : "MySQL"
+                  } refresh job first to populate this catalog.`}
                 />
               ) : (
                 <>

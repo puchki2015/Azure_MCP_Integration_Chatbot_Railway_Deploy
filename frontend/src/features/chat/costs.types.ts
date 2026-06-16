@@ -136,7 +136,7 @@ export type PriceCatalog = {
   total_pages: number;
 };
 
-export type PriceCatalogService = "Virtual Machines" | "Azure SQL Database";
+export type PriceCatalogService = "Virtual Machines" | "Azure SQL Database" | "Azure Database for MySQL";
 
 export type CostEstimateCreateRequest = {
   raw_input: string;
