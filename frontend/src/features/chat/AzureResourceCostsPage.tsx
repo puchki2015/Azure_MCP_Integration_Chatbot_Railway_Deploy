@@ -20,6 +20,18 @@ const catalogServices: Array<{ label: string; value: PriceCatalogService }> = [
 
 type PagerItem = number | "ellipsis";
 
+function buildAnalysisPayload(analysis: CostAnalysis) {
+  return {
+    raw_input: analysis.raw_input,
+    normalized_text: analysis.normalized_text,
+    intents: analysis.intents,
+    needs_confirmation: analysis.needs_confirmation,
+    clarification_items: analysis.clarification_items,
+    assumptions: analysis.assumptions,
+    ready_to_price: analysis.ready_to_price
+  };
+}
+
 function buildPagerItems(currentPage: number, totalPages: number): PagerItem[] {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -300,16 +312,65 @@ export function AzureResourceCostsPage() {
                   <>
                     <h2>{analysis.needs_confirmation ? "Confirmation needed" : "Ready to price"}</h2>
                     <p>{analysis.normalized_text}</p>
-                    <ul className="cost-page__list">
-                      {analysis.intents.map((intent, index) => (
-                        <li key={`${intent.resource_type}-${index}`}>
-                          {intent.resource_type}
-                          {intent.quantity ? ` x ${intent.quantity}` : ""}
-                          {intent.region ? ` in ${intent.region}` : ""}
-                          {intent.sku ? ` (${intent.sku})` : ""}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="cost-payload">
+                      <div className="cost-payload__grid">
+                        <div>
+                          <strong>Intents</strong>
+                          <span>{analysis.intents.length}</span>
+                        </div>
+                        <div>
+                          <strong>Confirmations</strong>
+                          <span>{analysis.clarification_items.length}</span>
+                        </div>
+                        <div>
+                          <strong>Ready</strong>
+                          <span>{analysis.ready_to_price ? "Yes" : "No"}</span>
+                        </div>
+                        <div>
+                          <strong>Assumptions</strong>
+                          <span>{analysis.assumptions.length}</span>
+                        </div>
+                      </div>
+
+                      <div className="cost-payload__intents">
+                        {analysis.intents.map((intent, index) => (
+                          <article key={`${intent.resource_type}-${index}`} className="cost-payload__intent">
+                            <strong>{intent.resource_type}</strong>
+                            <dl>
+                              <div>
+                                <dt>Quantity</dt>
+                                <dd>{intent.quantity ?? "n/a"}</dd>
+                              </div>
+                              <div>
+                                <dt>Region</dt>
+                                <dd>{intent.region ?? "n/a"}</dd>
+                              </div>
+                              <div>
+                                <dt>SKU</dt>
+                                <dd>{intent.sku ?? "n/a"}</dd>
+                              </div>
+                              <div>
+                                <dt>Deployment</dt>
+                                <dd>{intent.deployment_model ?? "n/a"}</dd>
+                              </div>
+                              <div>
+                                <dt>Generation</dt>
+                                <dd>{intent.compute_generation ?? "n/a"}</dd>
+                              </div>
+                              <div>
+                                <dt>OS</dt>
+                                <dd>{intent.os_image ?? "n/a"}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        ))}
+                      </div>
+
+                      <details className="cost-payload__details">
+                        <summary>Parsed payload</summary>
+                        <pre className="cost-payload__json">{JSON.stringify(buildAnalysisPayload(analysis), null, 2)}</pre>
+                      </details>
+                    </div>
                     {analysis.assumptions.length > 0 ? (
                       <div className="cost-page__notes">
                         {analysis.assumptions.map((assumption) => (
@@ -609,7 +670,7 @@ export function AzureResourceCostsPage() {
                         {buildPagerItems(catalog.page, catalog.total_pages).map((item, index) =>
                           item === "ellipsis" ? (
                             <span key={`ellipsis-${index}`} className="cost-catalog__ellipsis" aria-hidden="true">
-                              …
+                              ...
                             </span>
                           ) : (
                             <button

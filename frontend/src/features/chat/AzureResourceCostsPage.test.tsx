@@ -125,6 +125,7 @@ describe("AzureResourceCostsPage", () => {
 
     expect(await screen.findByText(/Confirmation needed/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirm the ambiguous fields/i)).toBeInTheDocument();
+    expect(screen.getByText(/Parsed payload/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getAllByRole("combobox")[0], {
       target: { value: "Standard_B4ms" }
@@ -362,7 +363,7 @@ describe("AzureResourceCostsPage", () => {
     expect(screen.getByText(/Standard_B4ms/i)).toBeInTheDocument();
     expect(screen.getByText(/0.080000 \/ 1 Hour/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^2$/ })).toBeInTheDocument();
-    expect(screen.getByText("…")).toBeInTheDocument();
+    expect(screen.getByText("...", { selector: ".cost-catalog__ellipsis" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /SQL Database/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^2$/ }));

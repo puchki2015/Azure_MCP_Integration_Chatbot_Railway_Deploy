@@ -25,6 +25,8 @@ export type CostResourceIntent = {
   quantity: number | null;
   region: string | null;
   sku: string | null;
+  deployment_model: string | null;
+  compute_generation: string | null;
   os_image: string | null;
   unit_name: string | null;
   confidence: string;

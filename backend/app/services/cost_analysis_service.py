@@ -97,7 +97,52 @@ class CostAnalysisService:
                     )
                 )
 
-        if "sql" in normalized_text:
+        if "mysql" in normalized_text:
+            quantity = self._extract_quantity(normalized_text, default=1)
+            region = next((normalized for alias, normalized in self.REGION_ALIASES.items() if alias in normalized_text), None)
+            deployment_model = None
+            tier = None
+            compute_generation = None
+
+            if "single server" in normalized_text:
+                deployment_model = "Single Server"
+            elif "flexible server" in normalized_text:
+                deployment_model = "Flexible Server"
+
+            if "general purpose" in normalized_text:
+                tier = "General Purpose"
+            if "business critical" in normalized_text:
+                tier = "Business Critical"
+            if "gen5" in normalized_text:
+                compute_generation = "Gen5"
+
+            mysql_descriptor_parts = [
+                value for value in [deployment_model, tier, f"Compute {compute_generation}" if compute_generation else None]
+                if value
+            ]
+            mysql_descriptor = " ".join(mysql_descriptor_parts).strip() or None
+            intents.append(
+                CostResourceIntent(
+                    resource_type="Azure Database for MySQL",
+                    quantity=quantity,
+                    region=region,
+                    sku=tier,
+                    deployment_model=deployment_model,
+                    compute_generation=compute_generation,
+                    unit_name="vCore Hour",
+                    confidence="low" if mysql_descriptor is None else "medium"
+                )
+            )
+            if not deployment_model or not tier or not compute_generation:
+                clarifications.append(
+                    CostClarificationItem(
+                        field_name="mysql_configuration",
+                        message="MySQL configuration is ambiguous. Please confirm the deployment model, tier, and compute generation you want priced.",
+                        suggested_values=["Single Server General Purpose Compute Gen5", "Flexible Server General Purpose Compute Gen5"]
+                    )
+                )
+
+        if re.search(r"\bsql\b", normalized_text) and "mysql" not in normalized_text:
             quantity = self._extract_quantity(normalized_text, default=1)
             region = next((normalized for alias, normalized in self.REGION_ALIASES.items() if alias in normalized_text), None)
             intents.append(
@@ -117,39 +162,6 @@ class CostAnalysisService:
                     suggested_values=["General Purpose", "Business Critical", "Serverless"]
                 )
             )
-
-        if "mysql" in normalized_text:
-            quantity = self._extract_quantity(normalized_text, default=1)
-            region = next((normalized for alias, normalized in self.REGION_ALIASES.items() if alias in normalized_text), None)
-            tier_bits: list[str] = []
-            if "single server" in normalized_text:
-                tier_bits.append("Single Server")
-            if "general purpose" in normalized_text:
-                tier_bits.append("General Purpose")
-            if "business critical" in normalized_text:
-                tier_bits.append("Business Critical")
-            if "gen5" in normalized_text:
-                tier_bits.append("Compute Gen5")
-
-            mysql_descriptor = " ".join(tier_bits).strip() or None
-            intents.append(
-                CostResourceIntent(
-                    resource_type="Azure Database for MySQL",
-                    quantity=quantity,
-                    region=region,
-                    sku=mysql_descriptor,
-                    unit_name="vCore Hour",
-                    confidence="low" if mysql_descriptor is None else "medium"
-                )
-            )
-            if mysql_descriptor is None:
-                clarifications.append(
-                    CostClarificationItem(
-                        field_name="mysql_tier",
-                        message="MySQL configuration is ambiguous. Please confirm the deployment model and tier you want priced.",
-                        suggested_values=["Single Server General Purpose Compute Gen5", "Flexible Server General Purpose Compute Gen5"]
-                    )
-                )
 
         for phrase in self.AMBIGUOUS_PHRASES:
             if phrase in normalized_text:

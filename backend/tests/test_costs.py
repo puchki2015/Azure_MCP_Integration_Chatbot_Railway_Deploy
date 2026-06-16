@@ -244,6 +244,39 @@ class CostCacheTests(unittest.TestCase):
         self.assertAlmostEqual(float(estimate.total_monthly), 43.8)
         self.assertGreaterEqual(mocked_fetch.call_count, 2)
 
+    def test_cost_pricing_service_prices_mysql_single_server_request(self):
+        analysis = cost_analysis_service.analyze(
+            "provide me the estimate of MySQL Single Server General Purpose - Compute Gen5 in UK South"
+        )
+
+        best_item = {
+            "id": "mysql-row-001",
+            "productName": "Azure Database for MySQL Single Server",
+            "meterName": "General Purpose - Compute Gen5",
+            "armRegionName": "uksouth",
+            "currencyCode": "USD",
+            "unitOfMeasure": "1 vCore Hour",
+            "type": "Consumption",
+            "retailPrice": 0.12,
+            "unitPrice": 0.12
+        }
+
+        with patch(
+            "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
+            return_value=(best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+        ) as mocked_fetch:
+            _, estimate = cost_pricing_service.create_estimate_from_analysis(
+                db=self.db,
+                raw_input="provide me the estimate of MySQL Single Server General Purpose - Compute Gen5 in UK South",
+                analysis=analysis
+            )
+
+        self.assertIsNotNone(estimate)
+        self.assertGreaterEqual(len(estimate.lines), 1)
+        self.assertAlmostEqual(float(estimate.total_hourly), 0.12)
+        self.assertAlmostEqual(float(estimate.total_monthly), 87.6)
+        self.assertGreaterEqual(mocked_fetch.call_count, 1)
+
     def test_refresh_all_vm_prices_updates_vm_lookup_keys(self):
         lookup = price_cache_service.get_or_create_lookup_key(
             db=self.db,

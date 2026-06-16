@@ -776,6 +776,110 @@ button, input { font: inherit; }
   gap: 10px;
 }
 
+.cost-payload {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.cost-payload__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cost-payload__grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.cost-payload__grid strong {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cost-payload__grid span {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cost-payload__intents {
+  display: grid;
+  gap: 12px;
+}
+
+.cost-payload__intent {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.cost-payload__intent strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.cost-payload__intent dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cost-payload__intent dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.cost-payload__intent dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cost-payload__intent dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+.cost-payload__details {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.cost-payload__details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.cost-payload__json {
+  margin: 12px 0 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .cost-page__terminal {
   margin-top: 22px;
   border-radius: 24px;
@@ -2142,6 +2246,8 @@ body[data-theme="sunset"] {
   .landing-stat:last-child { border-bottom: none; }
   .landing-cta__card { padding: 3rem 1.5rem; }
   .promo-page h1 { font-size: clamp(2.35rem, 10vw, 3.8rem); }
+  .cost-payload__grid,
+  .cost-payload__intent dl { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {

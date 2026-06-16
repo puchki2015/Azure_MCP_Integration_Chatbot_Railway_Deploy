@@ -37,6 +37,8 @@ class CostResourceIntent(BaseModel):
     quantity: float | None = None
     region: str | None = None
     sku: str | None = None
+    deployment_model: str | None = None
+    compute_generation: str | None = None
     os_image: str | None = None
     unit_name: str | None = None
     confidence: str = "low"

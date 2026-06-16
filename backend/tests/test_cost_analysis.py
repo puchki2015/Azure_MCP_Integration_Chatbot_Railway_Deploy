@@ -31,6 +31,21 @@ class CostAnalysisTests(unittest.TestCase):
         self.assertGreaterEqual(len(result.intents), 1)
         self.assertFalse(any(item.field_name == "os_image" for item in result.clarification_items))
 
+    def test_analyze_mysql_request_preserves_mysql_fields(self):
+        result = cost_analysis_service.analyze(
+            "provide me the estimate of MySQL Single Server General Purpose - Compute Gen5 in UK South"
+        )
+
+        self.assertTrue(result.ready_to_price)
+        self.assertEqual(len(result.intents), 1)
+        intent = result.intents[0]
+        self.assertEqual(intent.resource_type, "Azure Database for MySQL")
+        self.assertEqual(intent.region, "uksouth")
+        self.assertEqual(intent.deployment_model, "Single Server")
+        self.assertEqual(intent.sku, "General Purpose")
+        self.assertEqual(intent.compute_generation, "Gen5")
+        self.assertFalse(any(item.field_name == "mysql_configuration" for item in result.clarification_items))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -269,6 +269,24 @@ class CostPricingService:
             }
         )
 
+    def _mysql_deployment_model(self, intent: CostResourceIntent, selections: dict[str, str]) -> str | None:
+        return self._first_selection(selections, "mysql_deployment_model", "deployment_model") or intent.deployment_model
+
+    def _mysql_tier(self, intent: CostResourceIntent, selections: dict[str, str]) -> str | None:
+        return self._first_selection(selections, "mysql_tier", "tier") or intent.sku
+
+    def _mysql_compute_generation(self, intent: CostResourceIntent, selections: dict[str, str]) -> str | None:
+        return self._first_selection(selections, "mysql_compute_generation", "compute_generation") or intent.compute_generation
+
+    def _mysql_product_name(self, deployment_model: str | None) -> str:
+        if deployment_model:
+            return f"Azure Database for MySQL {deployment_model}"
+        return "Azure Database for MySQL"
+
+    def _mysql_meter_name(self, tier: str | None, compute_generation: str | None) -> str | None:
+        parts = [part for part in [tier, f"Compute {compute_generation}" if compute_generation else None] if part]
+        return " - ".join(parts) if parts else None
+
     def _sql_query_candidates(self, lookup: PricingLookupKey) -> list[RetailPriceQuery]:
         region = lookup.region
         currency_code = lookup.currency_code or "USD"
@@ -320,7 +338,10 @@ class CostPricingService:
 
     def _resolve_mysql(self, intent: CostResourceIntent, selections: dict[str, str]) -> ResolvedPricingLine:
         region = self._first_selection(selections, "region") or intent.region
-        descriptor = self._first_selection(selections, "mysql_tier", "tier") or intent.sku
+        deployment_model = self._mysql_deployment_model(intent, selections)
+        tier = self._mysql_tier(intent, selections)
+        compute_generation = self._mysql_compute_generation(intent, selections)
+        descriptor = self._mysql_meter_name(tier, compute_generation)
 
         if not region:
             raise HTTPException(
@@ -328,25 +349,27 @@ class CostPricingService:
                 detail="MySQL region is required before pricing can continue."
             )
 
-        if not descriptor:
+        if not deployment_model or not tier or not compute_generation:
             raise HTTPException(
                 status_code=422,
-                detail="MySQL tier is required before pricing can continue."
+                detail="MySQL deployment model, tier, and compute generation are required before pricing can continue."
             )
 
         lookup_spec = {
             "service_name": "Azure Database for MySQL",
-            "product_name": "Azure Database for MySQL",
+            "product_name": self._mysql_product_name(deployment_model),
             "meter_name": descriptor,
             "region": region,
             "currency_code": "USD",
             "unit_of_measure": "1 vCore Hour",
-            "tier": descriptor
+            "tier": tier,
+            "deployment_model": deployment_model,
+            "compute_generation": compute_generation
         }
         query = RetailPriceQuery(
             service_name="Azure Database for MySQL",
             arm_region_name=region,
-            product_name="Azure Database for MySQL",
+            product_name=self._mysql_product_name(deployment_model),
             meter_name=descriptor,
             price_type="Consumption",
             currency_code="USD"
@@ -355,11 +378,13 @@ class CostPricingService:
             intent=intent,
             lookup_spec=lookup_spec,
             query=query,
-            resource_name=descriptor,
+            resource_name=f"{deployment_model} {tier} {compute_generation}".strip(),
             matched_exactly=False,
             match_confidence="confirmed" if selections else "parsed_intent",
             assumptions={
-                "tier": descriptor,
+                "tier": tier,
+                "deployment_model": deployment_model,
+                "compute_generation": compute_generation,
                 "resolution_source": "confirmed_selection" if selections else "parsed_intent"
             }
         )
@@ -368,20 +393,41 @@ class CostPricingService:
         region = lookup.region
         currency_code = lookup.currency_code or "USD"
         tier = lookup.tier or lookup.meter_name
+        compute_generation = None
+        if lookup.meter_name:
+            generation_match = re.search(r"\b(Gen\d+)\b", lookup.meter_name, re.IGNORECASE)
+            if generation_match:
+                compute_generation = generation_match.group(1)
+        deployment_model = None
+        if lookup.product_name:
+            if "single server" in lookup.product_name.lower():
+                deployment_model = "Single Server"
+            elif "flexible server" in lookup.product_name.lower():
+                deployment_model = "Flexible Server"
+
+        product_name = self._mysql_product_name(deployment_model)
+        meter_name = self._mysql_meter_name(tier, compute_generation) or tier
 
         candidates = [
             RetailPriceQuery(
                 service_name="Azure Database for MySQL",
                 arm_region_name=region,
-                product_name=lookup.product_name or "Azure Database for MySQL",
-                meter_name=tier,
+                product_name=lookup.product_name or product_name,
+                meter_name=meter_name,
                 price_type="Consumption",
                 currency_code=currency_code
             ),
             RetailPriceQuery(
                 service_name="Azure Database for MySQL",
                 arm_region_name=region,
-                product_name=lookup.product_name or "Azure Database for MySQL",
+                product_name=lookup.product_name or product_name,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Azure Database for MySQL",
+                arm_region_name=region,
+                meter_name=meter_name,
                 price_type="Consumption",
                 currency_code=currency_code
             ),
@@ -457,10 +503,10 @@ class CostPricingService:
         resource_type = intent.resource_type.lower()
         if "virtual machine" in resource_type:
             return self._resolve_vm(intent, selections)
-        if "sql" in resource_type:
-            return self._resolve_sql(intent, selections)
         if "mysql" in resource_type:
             return self._resolve_mysql(intent, selections)
+        if "sql" in resource_type:
+            return self._resolve_sql(intent, selections)
 
         raise HTTPException(
             status_code=422,
@@ -487,10 +533,10 @@ class CostPricingService:
         if snapshot is None or price_cache_service.should_refresh(lookup):
             if resolved.intent.resource_type.lower().startswith("virtual machine"):
                 best_item, items, api_url, request_params = self._fetch_best_vm_item(lookup)
-            elif "sql" in resolved.intent.resource_type.lower():
-                best_item, items, api_url, request_params = self._fetch_best_sql_item(lookup)
             elif "mysql" in resolved.intent.resource_type.lower():
                 best_item, items, api_url, request_params = self._fetch_best_mysql_item(lookup)
+            elif "sql" in resolved.intent.resource_type.lower():
+                best_item, items, api_url, request_params = self._fetch_best_sql_item(lookup)
             else:
                 best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(
                     resolved.query
