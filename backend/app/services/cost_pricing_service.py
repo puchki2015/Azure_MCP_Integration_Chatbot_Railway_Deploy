@@ -318,6 +318,119 @@ class CostPricingService:
             deduped.append(candidate)
         return deduped
 
+    def _resolve_mysql(self, intent: CostResourceIntent, selections: dict[str, str]) -> ResolvedPricingLine:
+        region = self._first_selection(selections, "region") or intent.region
+        descriptor = self._first_selection(selections, "mysql_tier", "tier") or intent.sku
+
+        if not region:
+            raise HTTPException(
+                status_code=422,
+                detail="MySQL region is required before pricing can continue."
+            )
+
+        if not descriptor:
+            raise HTTPException(
+                status_code=422,
+                detail="MySQL tier is required before pricing can continue."
+            )
+
+        lookup_spec = {
+            "service_name": "Azure Database for MySQL",
+            "product_name": "Azure Database for MySQL",
+            "meter_name": descriptor,
+            "region": region,
+            "currency_code": "USD",
+            "unit_of_measure": "1 vCore Hour",
+            "tier": descriptor
+        }
+        query = RetailPriceQuery(
+            service_name="Azure Database for MySQL",
+            arm_region_name=region,
+            product_name="Azure Database for MySQL",
+            meter_name=descriptor,
+            price_type="Consumption",
+            currency_code="USD"
+        )
+        return ResolvedPricingLine(
+            intent=intent,
+            lookup_spec=lookup_spec,
+            query=query,
+            resource_name=descriptor,
+            matched_exactly=False,
+            match_confidence="confirmed" if selections else "parsed_intent",
+            assumptions={
+                "tier": descriptor,
+                "resolution_source": "confirmed_selection" if selections else "parsed_intent"
+            }
+        )
+
+    def _mysql_query_candidates(self, lookup: PricingLookupKey) -> list[RetailPriceQuery]:
+        region = lookup.region
+        currency_code = lookup.currency_code or "USD"
+        tier = lookup.tier or lookup.meter_name
+
+        candidates = [
+            RetailPriceQuery(
+                service_name="Azure Database for MySQL",
+                arm_region_name=region,
+                product_name=lookup.product_name or "Azure Database for MySQL",
+                meter_name=tier,
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Azure Database for MySQL",
+                arm_region_name=region,
+                product_name=lookup.product_name or "Azure Database for MySQL",
+                price_type="Consumption",
+                currency_code=currency_code
+            ),
+            RetailPriceQuery(
+                service_name="Azure Database for MySQL",
+                arm_region_name=region,
+                price_type="Consumption",
+                currency_code=currency_code
+            )
+        ]
+
+        deduped: list[RetailPriceQuery] = []
+        seen: set[tuple[Any, ...]] = set()
+        for candidate in candidates:
+            signature = (
+                candidate.service_name,
+                candidate.service_family,
+                candidate.arm_region_name,
+                candidate.arm_sku_name,
+                candidate.sku_name,
+                candidate.product_name,
+                candidate.meter_name,
+                candidate.price_type,
+                candidate.currency_code
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            deduped.append(candidate)
+        return deduped
+
+    def _fetch_best_mysql_item(
+        self,
+        lookup: PricingLookupKey
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str, dict[str, Any]]:
+        last_items: list[dict[str, Any]] = []
+        last_api_url = "https://prices.azure.com/api/retail/prices"
+        last_request_params: dict[str, Any] = {}
+
+        for query in self._mysql_query_candidates(lookup):
+            best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(query)
+            last_items = items
+            last_api_url = api_url
+            last_request_params = request_params
+            if best_item is not None:
+                return best_item, items, api_url, request_params
+
+        return None, last_items, last_api_url, last_request_params
+
     def _fetch_best_sql_item(
         self,
         lookup: PricingLookupKey
@@ -346,6 +459,8 @@ class CostPricingService:
             return self._resolve_vm(intent, selections)
         if "sql" in resource_type:
             return self._resolve_sql(intent, selections)
+        if "mysql" in resource_type:
+            return self._resolve_mysql(intent, selections)
 
         raise HTTPException(
             status_code=422,
@@ -374,6 +489,8 @@ class CostPricingService:
                 best_item, items, api_url, request_params = self._fetch_best_vm_item(lookup)
             elif "sql" in resolved.intent.resource_type.lower():
                 best_item, items, api_url, request_params = self._fetch_best_sql_item(lookup)
+            elif "mysql" in resolved.intent.resource_type.lower():
+                best_item, items, api_url, request_params = self._fetch_best_mysql_item(lookup)
             else:
                 best_item, items, api_url, request_params = azure_retail_prices_service.fetch_best_item(
                     resolved.query

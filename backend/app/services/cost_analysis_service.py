@@ -14,6 +14,8 @@ class CostAnalysisService:
         "eastus": "eastus",
         "west us": "westus",
         "westus": "westus",
+        "uk south": "uksouth",
+        "uksouth": "uksouth",
         "central us": "centralus",
         "centralus": "centralus",
         "east us 2": "eastus2",
@@ -115,6 +117,39 @@ class CostAnalysisService:
                     suggested_values=["General Purpose", "Business Critical", "Serverless"]
                 )
             )
+
+        if "mysql" in normalized_text:
+            quantity = self._extract_quantity(normalized_text, default=1)
+            region = next((normalized for alias, normalized in self.REGION_ALIASES.items() if alias in normalized_text), None)
+            tier_bits: list[str] = []
+            if "single server" in normalized_text:
+                tier_bits.append("Single Server")
+            if "general purpose" in normalized_text:
+                tier_bits.append("General Purpose")
+            if "business critical" in normalized_text:
+                tier_bits.append("Business Critical")
+            if "gen5" in normalized_text:
+                tier_bits.append("Compute Gen5")
+
+            mysql_descriptor = " ".join(tier_bits).strip() or None
+            intents.append(
+                CostResourceIntent(
+                    resource_type="Azure Database for MySQL",
+                    quantity=quantity,
+                    region=region,
+                    sku=mysql_descriptor,
+                    unit_name="vCore Hour",
+                    confidence="low" if mysql_descriptor is None else "medium"
+                )
+            )
+            if mysql_descriptor is None:
+                clarifications.append(
+                    CostClarificationItem(
+                        field_name="mysql_tier",
+                        message="MySQL configuration is ambiguous. Please confirm the deployment model and tier you want priced.",
+                        suggested_values=["Single Server General Purpose Compute Gen5", "Flexible Server General Purpose Compute Gen5"]
+                    )
+                )
 
         for phrase in self.AMBIGUOUS_PHRASES:
             if phrase in normalized_text:
