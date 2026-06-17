@@ -246,13 +246,13 @@ class CostCacheTests(unittest.TestCase):
 
     def test_cost_pricing_service_prices_mysql_single_server_request(self):
         analysis = cost_analysis_service.analyze(
-            "provide me the estimate of MySQL Single Server General Purpose - Compute Gen5 in UK South"
+            "provide me the estimate of MySQL Single Server General Purpose Compute Gen5 in UK South"
         )
 
         best_item = {
             "id": "mysql-row-001",
-            "productName": "Azure Database for MySQL Single Server",
-            "meterName": "General Purpose - Compute Gen5",
+            "productName": "Azure Database for MySQL Single Server General Purpose Gen5 Series Compute",
+            "meterName": "General Purpose Compute Gen5",
             "armRegionName": "uksouth",
             "currencyCode": "USD",
             "unitOfMeasure": "1 vCore Hour",
@@ -267,7 +267,7 @@ class CostCacheTests(unittest.TestCase):
         ) as mocked_fetch:
             _, estimate = cost_pricing_service.create_estimate_from_analysis(
                 db=self.db,
-                raw_input="provide me the estimate of MySQL Single Server General Purpose - Compute Gen5 in UK South",
+                raw_input="provide me the estimate of MySQL Single Server General Purpose Compute Gen5 in UK South",
                 analysis=analysis
             )
 
@@ -276,6 +276,50 @@ class CostCacheTests(unittest.TestCase):
         self.assertAlmostEqual(float(estimate.total_hourly), 0.12)
         self.assertAlmostEqual(float(estimate.total_monthly), 87.6)
         self.assertGreaterEqual(mocked_fetch.call_count, 1)
+        mysql_query = mocked_fetch.call_args[0][0]
+        self.assertEqual(mysql_query.service_name, "Azure Database for MySQL")
+        self.assertEqual(mysql_query.arm_region_name, "uksouth")
+        self.assertEqual(
+            mysql_query.product_name,
+            "Azure Database for MySQL Single Server General Purpose Gen5 Series Compute"
+        )
+        self.assertIsNone(mysql_query.meter_name)
+
+    def test_cost_pricing_service_prices_mysql_flexible_server_request(self):
+        analysis = cost_analysis_service.analyze(
+            "Price Azure Database for MySQL Flexible Server General Purpose Ddsv6 in west us"
+        )
+
+        best_item = {
+            "id": "mysql-row-002",
+            "productName": "Azure Database for MySQL Flexible Server General Purpose Ddsv6 Series Compute",
+            "meterName": "General Purpose Compute Ddsv6",
+            "armRegionName": "westus",
+            "currencyCode": "USD",
+            "unitOfMeasure": "1 vCore Hour",
+            "type": "Consumption",
+            "retailPrice": 0.146,
+            "unitPrice": 0.146
+        }
+
+        with patch(
+            "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
+            return_value=(best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+        ) as mocked_fetch:
+            _, estimate = cost_pricing_service.create_estimate_from_analysis(
+                db=self.db,
+                raw_input="Price Azure Database for MySQL Flexible Server General Purpose Ddsv6 in west us",
+                analysis=analysis
+            )
+
+        self.assertIsNotNone(estimate)
+        self.assertGreaterEqual(len(estimate.lines), 1)
+        self.assertAlmostEqual(float(estimate.total_hourly), 0.146)
+        self.assertAlmostEqual(float(estimate.total_monthly), 106.58)
+        self.assertGreaterEqual(mocked_fetch.call_count, 1)
+        mysql_query = mocked_fetch.call_args[0][0]
+        self.assertEqual(mysql_query.product_name, "Azure Database for MySQL Flexible Server General Purpose Ddsv6 Series Compute")
+        self.assertIsNone(mysql_query.meter_name)
 
     def test_refresh_all_vm_prices_updates_vm_lookup_keys(self):
         lookup = price_cache_service.get_or_create_lookup_key(

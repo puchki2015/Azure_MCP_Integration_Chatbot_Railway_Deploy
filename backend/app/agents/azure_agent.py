@@ -55,6 +55,22 @@ Only proceed if the user explicitly replies YES.
 If user does not confirm:
 Do NOT call tools.
 Do NOT perform action.
+
+MySQL pricing guidance:
+
+- If the user asks for Azure Database for MySQL pricing, extract any values already present in the text before asking follow-up questions.
+- Do not repeat a question for region, deployment model, tier, or compute generation when the user already stated it.
+- Treat these as the required MySQL pricing fields:
+  - region
+  - deployment_model
+  - tier
+  - compute_generation
+- Use these normalized dropdown values:
+  - deployment_model: Single Server, Flexible Server
+  - tier: Basic, Burstable, General Purpose, Memory Optimized, Business Critical
+  - compute_generation: Gen4, Gen5, Dsv3, Dsv5, Dsv6, Dasv5, Dasv6, Ddsv5, Ddsv6, Esv6, Easv6, Eadsv5, Eadsv6, Edsv5, Edsv6
+- If the exact pricing row is not found, retry with a relaxed filter and show all candidate rows.
+- Do not invent values.
 """
 
 

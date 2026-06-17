@@ -20,6 +20,92 @@ const catalogServices: Array<{ label: string; value: PriceCatalogService }> = [
 
 type PagerItem = number | "ellipsis";
 
+type ClarificationFieldMeta = {
+  title: string;
+  description: string;
+  placeholder: string;
+  optionOrder?: string[];
+};
+
+const MYSQL_CLARIFICATION_META: Record<string, ClarificationFieldMeta> = {
+  region: {
+    title: "MySQL region",
+    description: "Choose the Azure region for the pricing lookup.",
+    placeholder: "Select region",
+    optionOrder: ["eastus", "eastus2", "westus", "westus2", "centralus", "uksouth"]
+  },
+  deployment_model: {
+    title: "MySQL deployment model",
+    description: "Select the server deployment style requested by the user.",
+    placeholder: "Select deployment model",
+    optionOrder: ["Single Server", "Flexible Server"]
+  },
+  tier: {
+    title: "MySQL tier",
+    description: "Select the pricing tier for the MySQL deployment.",
+    placeholder: "Select tier",
+    optionOrder: ["Basic", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
+  },
+  compute_generation: {
+    title: "MySQL compute generation",
+    description: "Choose the compute generation that matches the user request.",
+    placeholder: "Select compute generation",
+    optionOrder: ["Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
+  }
+};
+
+const DEFAULT_CLARIFICATION_META: ClarificationFieldMeta = {
+  title: "Confirm the field",
+  description: "Select the most accurate value before pricing continues.",
+  placeholder: "Select one"
+};
+
+const CLARIFICATION_FIELD_ORDER = [
+  "region",
+  "deployment_model",
+  "tier",
+  "compute_generation",
+  "vm_size",
+  "os_image",
+  "sql_tier"
+];
+
+function getClarificationMeta(fieldName: string): ClarificationFieldMeta {
+  return MYSQL_CLARIFICATION_META[fieldName] ?? DEFAULT_CLARIFICATION_META;
+}
+
+function sortClarificationItems(items: CostAnalysis["clarification_items"]) {
+  return [...items].sort((left, right) => {
+    const leftIndex = CLARIFICATION_FIELD_ORDER.indexOf(left.field_name);
+    const rightIndex = CLARIFICATION_FIELD_ORDER.indexOf(right.field_name);
+    const safeLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const safeRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+
+    if (safeLeftIndex !== safeRightIndex) {
+      return safeLeftIndex - safeRightIndex;
+    }
+
+    return left.field_name.localeCompare(right.field_name);
+  });
+}
+
+function sortSuggestedValues(fieldName: string, suggestedValues: string[]) {
+  const meta = getClarificationMeta(fieldName);
+  if (!meta.optionOrder?.length) {
+    return suggestedValues;
+  }
+
+  const order = new Map(meta.optionOrder.map((value, index) => [value.toLowerCase(), index]));
+  return [...suggestedValues].sort((left, right) => {
+    const leftIndex = order.get(left.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = order.get(right.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    return left.localeCompare(right);
+  });
+}
+
 function buildAnalysisPayload(analysis: CostAnalysis) {
   return {
     raw_input: analysis.raw_input,
@@ -217,6 +303,11 @@ export function AzureResourceCostsPage() {
     }));
   };
 
+  const clarificationItems = analysis ? sortClarificationItems(analysis.clarification_items) : [];
+  const mysqlClarificationFields = new Set(["region", "deployment_model", "tier", "compute_generation"]);
+  const isMysqlClarificationFlow =
+    clarificationItems.length > 0 && clarificationItems.every((item) => mysqlClarificationFields.has(item.field_name));
+
   if (loading) {
     return (
       <div className="screen-center">
@@ -300,7 +391,8 @@ export function AzureResourceCostsPage() {
                       {analyzing ? "Analyzing..." : "Analyze request"}
                     </Button>
                     <span className="cost-form__hint">
-                      Clarifications are required before pricing ambiguous VM size, OS image, tier, or region inputs.
+                      Clarifications are required before pricing ambiguous VM size, OS image, region, deployment model,
+                      tier, or compute generation inputs.
                     </span>
                   </div>
                 </div>
@@ -388,35 +480,70 @@ export function AzureResourceCostsPage() {
               </Card>
             </div>
 
-            {analysis?.clarification_items.length ? (
-              <Card className="cost-card">
+            {clarificationItems.length ? (
+              <Card className={["cost-card", isMysqlClarificationFlow ? "cost-card--mysql" : ""].join(" ")}>
                 <span className="cost-card__eyebrow">Clarifications</span>
                 <h2>Confirm the ambiguous fields</h2>
-                <p>Select a value for each field below. These values will be passed back to the backend before pricing.</p>
+                {isMysqlClarificationFlow ? (
+                  <>
+                    <div className="cost-card__subtitle-row">
+                      <span className="cost-card__subtitle">MySQL pricing</span>
+                      <span className="cost-card__subtitle-note">
+                        Structured dropdowns for region, deployment model, tier, and compute generation
+                      </span>
+                    </div>
+                  <div className="cost-field-chips" aria-label="MySQL clarification fields">
+                    {clarificationItems.map((item) => {
+                      const meta = getClarificationMeta(item.field_name);
+                      return (
+                        <span key={item.field_name} className="cost-field-chip">
+                          {meta.title}
+                        </span>
+                        );
+                      })}
+                  </div>
+                  </>
+                ) : null}
+                <p>
+                  Select a value for each field below. These values are passed back to the backend before pricing,
+                  including MySQL dropdown fields such as deployment model, tier, compute generation, and region.
+                </p>
 
                 <div className="cost-form">
-                  {analysis.clarification_items.map((item) => (
-                    <label key={item.field_name} className="cost-form__field">
-                      <span className="cost-form__label">{item.message}</span>
-                      <select
-                        className="input"
-                        value={selections[item.field_name] ?? ""}
-                        onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
-                      >
-                        <option value="">Select one</option>
-                        {item.suggested_values.map((value) => (
-                          <option key={value} value={value}>
-                            {value}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
+                  {clarificationItems.map((item) => {
+                    const meta = getClarificationMeta(item.field_name);
+                    const suggestedValues = sortSuggestedValues(item.field_name, item.suggested_values);
+
+                    return (
+                      <div key={item.field_name} className="cost-form__field cost-form__field--grouped">
+                        <div className="cost-form__field-header">
+                          <span className="cost-form__label">{meta.title}</span>
+                          <p className="cost-form__hint">{meta.description}</p>
+                        </div>
+                        <select
+                          className="input"
+                          aria-label={meta.title}
+                          value={selections[item.field_name] ?? ""}
+                          onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
+                        >
+                          <option value="">{meta.placeholder}</option>
+                          {suggestedValues.map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                        {item.message && item.message !== meta.description ? (
+                          <small className="cost-form__helper">{item.message}</small>
+                        ) : null}
+                      </div>
+                    );
+                  })}
 
                   <div className="cost-form__actions">
                     <Button
                       onClick={() => void runResolution()}
-                      disabled={resolving || analysis.clarification_items.some((item) => !selections[item.field_name])}
+                      disabled={resolving || clarificationItems.some((item) => !selections[item.field_name])}
                     >
                       {resolving ? "Generating estimate..." : "Confirm and price"}
                     </Button>

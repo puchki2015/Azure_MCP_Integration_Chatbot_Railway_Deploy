@@ -24,6 +24,44 @@ class CostAnalysisService:
         "westus2": "westus2"
     }
 
+    MYSQL_DEPLOYMENT_MODEL_ALIASES = {
+        "single server": "Single Server",
+        "single": "Single Server",
+        "flexible server": "Flexible Server",
+        "flexible": "Flexible Server"
+    }
+
+    MYSQL_TIER_ALIASES = {
+        "basic": "Basic",
+        "burstable": "Burstable",
+        "general purpose": "General Purpose",
+        "gp": "General Purpose",
+        "memory optimized": "Memory Optimized",
+        "mem optimized": "Memory Optimized",
+        "business critical": "Business Critical",
+        "bc": "Business Critical"
+    }
+
+    MYSQL_COMPUTE_GENERATION_ALIASES = {
+        "gen4": "Gen4",
+        "gen5": "Gen5",
+        "dsv3": "Dsv3",
+        "dsv5": "Dsv5",
+        "dsv6": "Dsv6",
+        "dasv5": "Dasv5",
+        "dasv6": "Dasv6",
+        "dadsv5": "Dasv6",
+        "dadsv6": "Dasv6",
+        "ddsv5": "Ddsv5",
+        "ddsv6": "Ddsv6",
+        "esv6": "Esv6",
+        "easv6": "Easv6",
+        "eadsv5": "Eadsv5",
+        "eadsv6": "Eadsv6",
+        "edsv5": "Edsv5",
+        "edsv6": "Edsv6"
+    }
+
     AMBIGUOUS_PHRASES = [
         "latest ubuntu configuration",
         "average medium optimized",
@@ -39,9 +77,15 @@ class CostAnalysisService:
     def normalize_text(self, raw_input: str) -> str:
         text = raw_input.strip()
         lower = text.lower()
-        for alias, normalized in self.REGION_ALIASES.items():
+        for alias, normalized in sorted(self.REGION_ALIASES.items(), key=lambda item: len(item[0]), reverse=True):
             lower = re.sub(rf"\b{re.escape(alias)}\b", normalized, lower)
         return lower
+
+    def _find_alias_value(self, text: str, aliases: dict[str, str]) -> str | None:
+        for alias, normalized in sorted(aliases.items(), key=lambda item: len(item[0]), reverse=True):
+            if re.search(rf"\b{re.escape(alias)}\b", text, re.IGNORECASE):
+                return normalized
+        return None
 
     def _extract_quantity(self, text: str, default: float | None = None) -> float | None:
         match = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:x|vm|vms|virtual machines|sql databases?|databases?)\b", text, re.IGNORECASE)
@@ -99,27 +143,12 @@ class CostAnalysisService:
 
         if "mysql" in normalized_text:
             quantity = self._extract_quantity(normalized_text, default=1)
-            region = next((normalized for alias, normalized in self.REGION_ALIASES.items() if alias in normalized_text), None)
-            deployment_model = None
-            tier = None
-            compute_generation = None
+            region = self._find_alias_value(normalized_text, self.REGION_ALIASES)
+            deployment_model = self._find_alias_value(normalized_text, self.MYSQL_DEPLOYMENT_MODEL_ALIASES)
+            tier = self._find_alias_value(normalized_text, self.MYSQL_TIER_ALIASES)
+            compute_generation = self._find_alias_value(normalized_text, self.MYSQL_COMPUTE_GENERATION_ALIASES)
 
-            if "single server" in normalized_text:
-                deployment_model = "Single Server"
-            elif "flexible server" in normalized_text:
-                deployment_model = "Flexible Server"
-
-            if "general purpose" in normalized_text:
-                tier = "General Purpose"
-            if "business critical" in normalized_text:
-                tier = "Business Critical"
-            if "gen5" in normalized_text:
-                compute_generation = "Gen5"
-
-            mysql_descriptor_parts = [
-                value for value in [deployment_model, tier, f"Compute {compute_generation}" if compute_generation else None]
-                if value
-            ]
+            mysql_descriptor_parts = [value for value in [deployment_model, tier, compute_generation] if value]
             mysql_descriptor = " ".join(mysql_descriptor_parts).strip() or None
             intents.append(
                 CostResourceIntent(
@@ -133,12 +162,36 @@ class CostAnalysisService:
                     confidence="low" if mysql_descriptor is None else "medium"
                 )
             )
-            if not deployment_model or not tier or not compute_generation:
+            if not region:
                 clarifications.append(
                     CostClarificationItem(
-                        field_name="mysql_configuration",
-                        message="MySQL configuration is ambiguous. Please confirm the deployment model, tier, and compute generation you want priced.",
-                        suggested_values=["Single Server General Purpose Compute Gen5", "Flexible Server General Purpose Compute Gen5"]
+                        field_name="region",
+                        message="Region is required for MySQL pricing.",
+                        suggested_values=["eastus", "eastus2", "westus", "westus2", "centralus", "uksouth"]
+                    )
+                )
+            if not deployment_model:
+                clarifications.append(
+                    CostClarificationItem(
+                        field_name="deployment_model",
+                        message="Choose the MySQL deployment model.",
+                        suggested_values=["Single Server", "Flexible Server"]
+                    )
+                )
+            if not tier:
+                clarifications.append(
+                    CostClarificationItem(
+                        field_name="tier",
+                        message="Choose the MySQL pricing tier.",
+                        suggested_values=["Basic", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
+                    )
+                )
+            if not compute_generation:
+                clarifications.append(
+                    CostClarificationItem(
+                        field_name="compute_generation",
+                        message="Choose the MySQL compute generation.",
+                        suggested_values=["Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
                     )
                 )
 

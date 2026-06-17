@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AzureResourceCostsPage } from "./AzureResourceCostsPage";
 
@@ -18,6 +18,7 @@ vi.mock("./costs.api", () => ({
 
 describe("AzureResourceCostsPage", () => {
   beforeEach(() => {
+    cleanup();
     listCostEstimatesMock.mockReset();
     analyzeCostRequestMock.mockReset();
     resolveCostRequestMock.mockReset();
@@ -150,6 +151,75 @@ describe("AzureResourceCostsPage", () => {
         sql_tier: "General Purpose"
       }
     });
+  });
+
+  it("renders MySQL clarification dropdowns with structured labels and ordering", async () => {
+    listCostEstimatesMock.mockResolvedValueOnce([]);
+
+    analyzeCostRequestMock.mockResolvedValueOnce({
+      raw_input: "Price Azure Database for MySQL in west us",
+      normalized_text: "price azure database for mysql in westus",
+      intents: [
+        {
+          resource_type: "Azure Database for MySQL",
+          quantity: 1,
+          region: "westus",
+          sku: null,
+          deployment_model: null,
+          compute_generation: null,
+          os_image: null,
+          unit_name: "vCore Hour",
+          confidence: "low"
+        }
+      ],
+      needs_confirmation: true,
+      clarification_items: [
+        {
+          field_name: "compute_generation",
+          message: "Choose the MySQL compute generation.",
+          suggested_values: ["Edsv5", "Ddsv6", "Gen5"]
+        },
+        {
+          field_name: "deployment_model",
+          message: "Choose the MySQL deployment model.",
+          suggested_values: ["Flexible Server", "Single Server"]
+        },
+        {
+          field_name: "tier",
+          message: "Choose the MySQL pricing tier.",
+          suggested_values: ["Business Critical", "General Purpose", "Burstable"]
+        },
+        {
+          field_name: "region",
+          message: "Region is required for MySQL pricing.",
+          suggested_values: ["westus", "eastus", "uksouth"]
+        }
+      ],
+      assumptions: [],
+      ready_to_price: false
+    });
+
+    render(<AzureResourceCostsPage />);
+
+    expect(await screen.findByText(/No estimates yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Analyze request/i }));
+
+    expect(await screen.findByText(/Confirm the ambiguous fields/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("MySQL region")).toBeInTheDocument();
+    expect(screen.getByLabelText("MySQL deployment model")).toBeInTheDocument();
+    expect(screen.getByLabelText("MySQL tier")).toBeInTheDocument();
+    expect(screen.getByLabelText("MySQL compute generation")).toBeInTheDocument();
+
+    const regionSelect = screen.getByLabelText("MySQL region") as HTMLSelectElement;
+    const deploymentSelect = screen.getByLabelText("MySQL deployment model") as HTMLSelectElement;
+    const tierSelect = screen.getByLabelText("MySQL tier") as HTMLSelectElement;
+    const generationSelect = screen.getByLabelText("MySQL compute generation") as HTMLSelectElement;
+
+    expect(within(regionSelect).getAllByRole("option")[1]).toHaveTextContent("eastus");
+    expect(within(deploymentSelect).getAllByRole("option")[1]).toHaveTextContent("Single Server");
+    expect(within(tierSelect).getAllByRole("option")[1]).toHaveTextContent("Burstable");
+    expect(within(generationSelect).getAllByRole("option")[1]).toHaveTextContent("Gen5");
   });
 
   it("runs the VM refresh job from the refresh tab", async () => {

@@ -278,10 +278,20 @@ class CostPricingService:
     def _mysql_compute_generation(self, intent: CostResourceIntent, selections: dict[str, str]) -> str | None:
         return self._first_selection(selections, "mysql_compute_generation", "compute_generation") or intent.compute_generation
 
-    def _mysql_product_name(self, deployment_model: str | None) -> str:
+    def _mysql_product_name(
+        self,
+        deployment_model: str | None,
+        tier: str | None = None,
+        compute_generation: str | None = None
+    ) -> str:
+        parts = ["Azure Database for MySQL"]
         if deployment_model:
-            return f"Azure Database for MySQL {deployment_model}"
-        return "Azure Database for MySQL"
+            parts.append(deployment_model)
+        if tier:
+            parts.append(tier)
+        if compute_generation:
+            parts.append(f"{compute_generation} Series Compute")
+        return " ".join(parts)
 
     def _mysql_meter_name(self, tier: str | None, compute_generation: str | None) -> str | None:
         parts = [part for part in [tier, f"Compute {compute_generation}" if compute_generation else None] if part]
@@ -342,6 +352,7 @@ class CostPricingService:
         tier = self._mysql_tier(intent, selections)
         compute_generation = self._mysql_compute_generation(intent, selections)
         descriptor = self._mysql_meter_name(tier, compute_generation)
+        product_name = self._mysql_product_name(deployment_model, tier, compute_generation)
 
         if not region:
             raise HTTPException(
@@ -357,7 +368,7 @@ class CostPricingService:
 
         lookup_spec = {
             "service_name": "Azure Database for MySQL",
-            "product_name": self._mysql_product_name(deployment_model),
+            "product_name": product_name,
             "meter_name": descriptor,
             "region": region,
             "currency_code": "USD",
@@ -369,8 +380,7 @@ class CostPricingService:
         query = RetailPriceQuery(
             service_name="Azure Database for MySQL",
             arm_region_name=region,
-            product_name=self._mysql_product_name(deployment_model),
-            meter_name=descriptor,
+            product_name=product_name,
             price_type="Consumption",
             currency_code="USD"
         )
@@ -405,29 +415,27 @@ class CostPricingService:
             elif "flexible server" in lookup.product_name.lower():
                 deployment_model = "Flexible Server"
 
-        product_name = self._mysql_product_name(deployment_model)
-        meter_name = self._mysql_meter_name(tier, compute_generation) or tier
+        product_name = lookup.product_name or self._mysql_product_name(deployment_model, tier, compute_generation)
+        relaxed_product_name = self._mysql_product_name(deployment_model, None, None)
 
         candidates = [
             RetailPriceQuery(
                 service_name="Azure Database for MySQL",
                 arm_region_name=region,
-                product_name=lookup.product_name or product_name,
-                meter_name=meter_name,
+                product_name=product_name,
                 price_type="Consumption",
                 currency_code=currency_code
             ),
             RetailPriceQuery(
                 service_name="Azure Database for MySQL",
                 arm_region_name=region,
-                product_name=lookup.product_name or product_name,
+                product_name=relaxed_product_name,
                 price_type="Consumption",
                 currency_code=currency_code
             ),
             RetailPriceQuery(
                 service_name="Azure Database for MySQL",
                 arm_region_name=region,
-                meter_name=meter_name,
                 price_type="Consumption",
                 currency_code=currency_code
             ),
