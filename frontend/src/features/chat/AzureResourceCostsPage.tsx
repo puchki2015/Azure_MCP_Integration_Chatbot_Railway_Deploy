@@ -53,7 +53,7 @@ const MYSQL_CLARIFICATION_META: Record<string, ClarificationFieldMeta> = {
     title: "MySQL tier",
     description: "Select the pricing tier for the MySQL deployment.",
     placeholder: "Select tier",
-    optionOrder: ["Basic", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
+    optionOrder: ["Basic", "Storage", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
   },
   compute_generation: {
     title: "MySQL compute generation",

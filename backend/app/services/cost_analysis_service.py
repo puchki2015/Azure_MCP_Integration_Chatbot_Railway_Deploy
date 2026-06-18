@@ -34,6 +34,7 @@ class CostAnalysisService:
     MYSQL_TIER_ALIASES = {
         "basic": "Basic",
         "burstable": "Burstable",
+        "storage": "Storage",
         "general purpose": "General Purpose",
         "gp": "General Purpose",
         "memory optimized": "Memory Optimized",
@@ -147,6 +148,7 @@ class CostAnalysisService:
             deployment_model = self._find_alias_value(normalized_text, self.MYSQL_DEPLOYMENT_MODEL_ALIASES)
             tier = self._find_alias_value(normalized_text, self.MYSQL_TIER_ALIASES)
             compute_generation = self._find_alias_value(normalized_text, self.MYSQL_COMPUTE_GENERATION_ALIASES)
+            unit_name = "GB/Month" if tier == "Storage" else "vCore Hour"
 
             mysql_descriptor_parts = [value for value in [deployment_model, tier, compute_generation] if value]
             mysql_descriptor = " ".join(mysql_descriptor_parts).strip() or None
@@ -158,7 +160,7 @@ class CostAnalysisService:
                     sku=tier,
                     deployment_model=deployment_model,
                     compute_generation=compute_generation,
-                    unit_name="vCore Hour",
+                    unit_name=unit_name,
                     confidence="low" if mysql_descriptor is None else "medium"
                 )
             )
@@ -183,10 +185,10 @@ class CostAnalysisService:
                     CostClarificationItem(
                         field_name="tier",
                         message="Choose the MySQL pricing tier.",
-                        suggested_values=["Basic", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
+                        suggested_values=["Basic", "Storage", "Burstable", "General Purpose", "Memory Optimized", "Business Critical"]
                     )
                 )
-            if not compute_generation:
+            if tier != "Storage" and not compute_generation:
                 clarifications.append(
                     CostClarificationItem(
                         field_name="compute_generation",

@@ -288,12 +288,21 @@ class CostPricingService:
         if deployment_model:
             parts.append(deployment_model)
         if tier:
-            parts.append(tier)
+            if tier == "Storage":
+                parts.append("Basic - Storage")
+            else:
+                parts.append(tier)
         if compute_generation:
-            parts.append(f"{compute_generation} Series Compute")
+            if compute_generation in {"Gen4", "Gen5"}:
+                parts.append(f"- Compute {compute_generation}")
+            else:
+                parts.append(f"{compute_generation} Series Compute")
         return " ".join(parts)
 
     def _mysql_meter_name(self, tier: str | None, compute_generation: str | None) -> str | None:
+        if tier == "Storage":
+            return "Basic - Storage"
+
         parts = [part for part in [tier, f"Compute {compute_generation}" if compute_generation else None] if part]
         return " - ".join(parts) if parts else None
 
@@ -353,6 +362,7 @@ class CostPricingService:
         compute_generation = self._mysql_compute_generation(intent, selections)
         descriptor = self._mysql_meter_name(tier, compute_generation)
         product_name = self._mysql_product_name(deployment_model, tier, compute_generation)
+        storage_tier = tier == "Storage"
 
         if not region:
             raise HTTPException(
@@ -360,19 +370,20 @@ class CostPricingService:
                 detail="MySQL region is required before pricing can continue."
             )
 
-        if not deployment_model or not tier or not compute_generation:
+        if not deployment_model or not tier or (not storage_tier and not compute_generation):
             raise HTTPException(
                 status_code=422,
-                detail="MySQL deployment model, tier, and compute generation are required before pricing can continue."
+                detail="MySQL deployment model and tier are required before pricing can continue."
             )
 
+        unit_of_measure = "1 GB/Month" if storage_tier else "1 vCore Hour"
         lookup_spec = {
             "service_name": "Azure Database for MySQL",
             "product_name": product_name,
             "meter_name": descriptor,
             "region": region,
             "currency_code": "USD",
-            "unit_of_measure": "1 vCore Hour",
+            "unit_of_measure": unit_of_measure,
             "tier": tier,
             "deployment_model": deployment_model,
             "compute_generation": compute_generation
@@ -384,11 +395,14 @@ class CostPricingService:
             price_type="Consumption",
             currency_code="USD"
         )
+        resource_name_parts = [deployment_model, tier]
+        if not storage_tier and compute_generation:
+            resource_name_parts.append(compute_generation)
         return ResolvedPricingLine(
             intent=intent,
             lookup_spec=lookup_spec,
             query=query,
-            resource_name=f"{deployment_model} {tier} {compute_generation}".strip(),
+            resource_name=" ".join(part for part in resource_name_parts if part),
             matched_exactly=False,
             match_confidence="confirmed" if selections else "parsed_intent",
             assumptions={
@@ -574,8 +588,13 @@ class CostPricingService:
             candidate_records = [snapshot.raw_payload]
 
         unit_price = float(snapshot.unit_price or snapshot.retail_price or 0)
-        hourly_rate = quantity * unit_price
-        monthly_rate = hourly_rate * self.HOURS_PER_MONTH
+        unit_of_measure = str(resolved.lookup_spec.get("unit_of_measure") or "").lower()
+        if "month" in unit_of_measure:
+            monthly_rate = quantity * unit_price
+            hourly_rate = monthly_rate / self.HOURS_PER_MONTH
+        else:
+            hourly_rate = quantity * unit_price
+            monthly_rate = hourly_rate * self.HOURS_PER_MONTH
 
         return price_cache_service.add_estimate_line(
             db=db,

@@ -64,6 +64,22 @@ class CostAnalysisTests(unittest.TestCase):
         self.assertEqual(intent.compute_generation, "Ddsv6")
         self.assertFalse(result.clarification_items)
 
+    def test_analyze_mysql_storage_request_skips_compute_generation(self):
+        result = cost_analysis_service.analyze(
+            "Price Azure Database for MySQL Single Server Storage in west us"
+        )
+
+        self.assertTrue(result.ready_to_price)
+        self.assertFalse(result.needs_confirmation)
+        self.assertEqual(len(result.intents), 1)
+        intent = result.intents[0]
+        self.assertEqual(intent.resource_type, "Azure Database for MySQL")
+        self.assertEqual(intent.region, "westus")
+        self.assertEqual(intent.deployment_model, "Single Server")
+        self.assertEqual(intent.sku, "Storage")
+        self.assertIsNone(intent.compute_generation)
+        self.assertFalse(any(item.field_name == "compute_generation" for item in result.clarification_items))
+
     def test_analyze_mysql_request_requests_only_missing_fields(self):
         result = cost_analysis_service.analyze(
             "Price Azure Database for MySQL in west us"

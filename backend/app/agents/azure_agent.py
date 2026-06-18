@@ -67,7 +67,7 @@ MySQL pricing guidance:
   - compute_generation
 - Use these normalized dropdown values:
   - deployment_model: Single Server, Flexible Server
-  - tier: Basic, Burstable, General Purpose, Memory Optimized, Business Critical
+  - tier: Basic, Storage, Burstable, General Purpose, Memory Optimized, Business Critical
   - compute_generation: Gen4, Gen5, Dsv3, Dsv5, Dsv6, Dasv5, Dasv6, Ddsv5, Ddsv6, Esv6, Easv6, Eadsv5, Eadsv6, Edsv5, Edsv6
 - If the exact pricing row is not found, retry with a relaxed filter and show all candidate rows.
 - Do not invent values.
