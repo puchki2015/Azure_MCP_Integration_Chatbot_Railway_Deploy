@@ -370,13 +370,15 @@ class CostPricingService:
                 detail="MySQL region is required before pricing can continue."
             )
 
-        if not deployment_model or not tier or (not storage_tier and not compute_generation):
+        if not deployment_model or not tier:
             raise HTTPException(
                 status_code=422,
                 detail="MySQL deployment model and tier are required before pricing can continue."
             )
 
         unit_of_measure = "1 GB/Month" if storage_tier else "1 vCore Hour"
+        if not compute_generation and not storage_tier:
+            descriptor = tier
         lookup_spec = {
             "service_name": "Azure Database for MySQL",
             "product_name": product_name,

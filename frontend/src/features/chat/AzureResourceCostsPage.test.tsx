@@ -177,7 +177,7 @@ describe("AzureResourceCostsPage", () => {
         {
           field_name: "compute_generation",
           message: "Choose the MySQL compute generation.",
-          suggested_values: ["", "Edsv5", "Ddsv6", "Gen5"]
+          suggested_values: ["Edsv5", "Ddsv6", "Gen5"]
         },
         {
           field_name: "deployment_model",
@@ -219,9 +219,7 @@ describe("AzureResourceCostsPage", () => {
     expect(within(regionSelect).getAllByRole("option")[1]).toHaveTextContent("eastus");
     expect(within(deploymentSelect).getAllByRole("option")[1]).toHaveTextContent("Single Server");
     expect(within(tierSelect).getAllByRole("option")[1]).toHaveTextContent("Burstable");
-    expect((within(generationSelect).getAllByRole("option")[1] as HTMLOptionElement).value).toBe("__separator__");
-    expect((within(generationSelect).getAllByRole("option")[2] as HTMLOptionElement).value).toBe("__blank__");
-    expect(within(generationSelect).getAllByRole("option")[3]).toHaveTextContent("Gen5");
+    expect(within(generationSelect).getAllByRole("option")[1]).toHaveTextContent("Gen5");
   });
 
   it("runs the VM refresh job from the refresh tab", async () => {

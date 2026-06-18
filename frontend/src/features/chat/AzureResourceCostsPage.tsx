@@ -57,7 +57,7 @@ const MYSQL_CLARIFICATION_META: Record<string, ClarificationFieldMeta> = {
   },
   compute_generation: {
     title: "MySQL compute generation",
-    description: "Choose the compute generation that matches the user request.",
+    description: "Optional: choose the compute generation for a tighter match.",
     placeholder: "Select compute generation",
     optionOrder: ["", "Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
   }
@@ -117,11 +117,7 @@ function sortSuggestedValues(fieldName: string, suggestedValues: string[]) {
 }
 
 function shouldRenderBlankOption(fieldName: string) {
-  return fieldName === "compute_generation";
-}
-
-function normalizeClarificationSelection(value: string) {
-  return value === "__blank__" ? "" : value;
+  return false;
 }
 
 function groupEstimateLines(lines: CostEstimate["lines"]): EstimateLineGroup[] {
@@ -384,7 +380,7 @@ export function AzureResourceCostsPage() {
   const handleSelectionChange = (fieldName: string, value: string) => {
     setSelections((current) => ({
       ...current,
-      [fieldName]: normalizeClarificationSelection(value)
+      [fieldName]: value
     }));
   };
 
@@ -639,7 +635,12 @@ export function AzureResourceCostsPage() {
                   <div className="cost-form__actions">
                     <Button
                       onClick={() => void runResolution()}
-                      disabled={resolving || clarificationItems.some((item) => !selections[item.field_name])}
+                      disabled={
+                        resolving ||
+                        clarificationItems.some(
+                          (item) => item.field_name !== "compute_generation" && !selections[item.field_name]
+                        )
+                      }
                     >
                       {resolving ? "Generating estimate..." : "Confirm and price"}
                     </Button>

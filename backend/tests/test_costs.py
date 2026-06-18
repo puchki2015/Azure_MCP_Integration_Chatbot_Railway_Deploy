@@ -365,6 +365,41 @@ class CostCacheTests(unittest.TestCase):
             "1 GB/Month"
         )
 
+    def test_cost_pricing_service_allows_missing_mysql_compute_generation(self):
+        analysis = cost_analysis_service.analyze(
+            "Price Azure Database for MySQL Single Server Basic in west us"
+        )
+
+        best_item = {
+            "id": "mysql-row-no-gen-001",
+            "productName": "Azure Database for MySQL Single Server Basic",
+            "meterName": "Basic",
+            "armRegionName": "westus",
+            "currencyCode": "USD",
+            "unitOfMeasure": "1 vCore Hour",
+            "type": "Consumption",
+            "retailPrice": 0.0442,
+            "unitPrice": 0.0442
+        }
+
+        with patch(
+            "app.services.cost_pricing_service.azure_retail_prices_service.fetch_best_item",
+            return_value=(best_item, [best_item], "https://prices.azure.com/api/retail/prices", {})
+        ) as mocked_fetch:
+            _, estimate = cost_pricing_service.create_estimate_from_analysis(
+                db=self.db,
+                raw_input="Price Azure Database for MySQL Single Server Basic in west us",
+                analysis=analysis,
+                selections={"region": "westus", "deployment_model": "Single Server", "tier": "Basic", "compute_generation": ""}
+            )
+
+        self.assertIsNotNone(estimate)
+        self.assertGreaterEqual(len(estimate.lines), 1)
+        self.assertGreaterEqual(mocked_fetch.call_count, 1)
+        mysql_query = mocked_fetch.call_args[0][0]
+        self.assertEqual(mysql_query.product_name, "Azure Database for MySQL Single Server Basic")
+        self.assertIsNone(mysql_query.meter_name)
+
     def test_refresh_all_vm_prices_updates_vm_lookup_keys(self):
         lookup = price_cache_service.get_or_create_lookup_key(
             db=self.db,

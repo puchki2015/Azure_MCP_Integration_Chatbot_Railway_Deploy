@@ -193,7 +193,7 @@ class CostAnalysisService:
                     CostClarificationItem(
                         field_name="compute_generation",
                         message="Choose the MySQL compute generation.",
-                        suggested_values=["", "Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
+                        suggested_values=["Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
                     )
                 )
 
