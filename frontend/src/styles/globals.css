@@ -884,6 +884,19 @@ button, input { font: inherit; }
   font-family: Sora, Inter, sans-serif;
 }
 
+.estimate-breakdown__groupTitleMeta {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--brand-2);
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  vertical-align: middle;
+}
+
 .estimate-breakdown__groupHeader p {
   margin: 4px 0 0;
   color: var(--muted);
@@ -911,10 +924,8 @@ button, input { font: inherit; }
 }
 
 .estimate-breakdown__line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
+  display: grid;
+  gap: 10px;
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(245, 247, 251, 0.92);
@@ -936,14 +947,164 @@ button, input { font: inherit; }
 }
 
 .estimate-breakdown__linePricing {
-  text-align: right;
-  display: grid;
-  gap: 2px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .estimate-breakdown__linePricing span {
   font-size: 0.88rem;
   color: var(--text);
+}
+
+.estimate-breakdown__lineDetails {
+  padding-top: 4px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.24);
+}
+
+.estimate-breakdown__lineDetails--records {
+  margin-top: 2px;
+  padding-top: 10px;
+}
+
+.estimate-breakdown__recordToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.estimate-breakdown__recordToolbar span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.estimate-breakdown__sortButton {
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.estimate-breakdown__sortButton:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.estimate-breakdown__sortButton--active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(14, 165, 233, 0.16));
+  border-color: rgba(37, 99, 235, 0.28);
+  color: var(--brand);
+}
+
+.estimate-breakdown__lineDetails summary {
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.estimate-breakdown__detailGrid {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.estimate-breakdown__detailGrid div {
+  display: grid;
+  gap: 2px;
+}
+
+.estimate-breakdown__detailGrid dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.estimate-breakdown__detailGrid dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+
+.estimate-breakdown__recordTableWrap {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.estimate-breakdown__recordTable {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  border-spacing: 0;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.estimate-breakdown__recordTable th,
+.estimate-breakdown__recordTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.85rem;
+}
+
+.estimate-breakdown__recordTable th {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.estimate-breakdown__recordTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.estimate-breakdown__recordRow--selected td {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.estimate-breakdown__recordRow--selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.estimate-breakdown__recordLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  font-weight: 700;
+}
+
+.estimate-breakdown__recordBadge {
+  vertical-align: middle;
+}
+
+.estimate-breakdown__recordTablePrice {
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--brand);
 }
 
 .cost-payload {

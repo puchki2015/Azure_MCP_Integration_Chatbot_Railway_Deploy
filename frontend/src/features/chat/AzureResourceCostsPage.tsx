@@ -27,6 +27,8 @@ type EstimateLineGroup = {
   subtotal_monthly: number;
 };
 
+type CandidateRecordSortMode = "api" | "price-asc" | "price-desc";
+
 type ClarificationFieldMeta = {
   title: string;
   description: string;
@@ -140,6 +142,45 @@ function groupEstimateLines(lines: CostEstimate["lines"]): EstimateLineGroup[] {
   return Array.from(groups.values());
 }
 
+function getCandidateRecords(assumptions: Record<string, unknown> | null | undefined) {
+  const records = assumptions?.candidate_records;
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
+  return records.filter((record): record is Record<string, unknown> => Boolean(record) && typeof record === "object");
+}
+
+function sortCandidateRecords(records: Record<string, unknown>[], mode: CandidateRecordSortMode) {
+  const sorted = [...records];
+
+  if (mode === "api") {
+    return sorted;
+  }
+
+  sorted.sort((left, right) => {
+    const leftPrice = Number(left.retailPrice ?? left.retail_price ?? 0);
+    const rightPrice = Number(right.retailPrice ?? right.retail_price ?? 0);
+    return mode === "price-asc" ? leftPrice - rightPrice : rightPrice - leftPrice;
+  });
+
+  return sorted;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function renderAssumptionValue(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+}
+
 function buildAnalysisPayload(analysis: CostAnalysis) {
   return {
     raw_input: analysis.raw_input,
@@ -186,6 +227,7 @@ export function AzureResourceCostsPage() {
   const [catalog, setCatalog] = useState<PriceCatalog | null>(null);
   const [catalogService, setCatalogService] = useState<PriceCatalogService>("Virtual Machines");
   const [catalogPage, setCatalogPage] = useState(1);
+  const [candidateRecordSort, setCandidateRecordSort] = useState<CandidateRecordSortMode>("api");
   const catalogPageSize = 8;
   const [loading, setLoading] = useState(true);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
@@ -603,8 +645,18 @@ export function AzureResourceCostsPage() {
                         <section key={group.resource_type} className="estimate-breakdown__group">
                           <div className="estimate-breakdown__groupHeader">
                             <div>
-                              <h3>{group.resource_type}</h3>
-                              <p>{group.lines.length} line{group.lines.length === 1 ? "" : "s"} priced together</p>
+                              <h3>
+                                {group.resource_type}
+                                {group.lines[0]?.resource_name ? (
+                                  <span className="estimate-breakdown__groupTitleMeta">
+                                    {group.lines[0].resource_name}
+                                  </span>
+                                ) : null}
+                              </h3>
+                              <p>
+                                {group.resource_type} priced as{" "}
+                                {group.lines.length === 1 ? "1 record" : `${group.lines.length} records`}
+                              </p>
                             </div>
                             <div className="estimate-breakdown__groupTotals">
                               <strong>${group.subtotal_monthly.toFixed(2)} / month</strong>
@@ -613,19 +665,180 @@ export function AzureResourceCostsPage() {
                           </div>
 
                           <div className="estimate-breakdown__lines">
-                            {group.lines.map((line) => (
+                            {group.lines.map((line, index) => (
+                              (() => {
+                                const assumptions = line.assumptions as Record<string, unknown> | null;
+                                const lookupKey = assumptions?.lookup_key as Record<string, unknown> | undefined;
+                                const candidateRecords = sortCandidateRecords(getCandidateRecords(assumptions), candidateRecordSort);
+
+                                return (
                               <article key={line.id} className="estimate-breakdown__line">
                                 <div className="estimate-breakdown__lineMain">
-                                  <strong>{line.resource_name ?? line.resource_type}</strong>
+                                  <strong>
+                                    Record {index + 1}
+                                    {line.resource_name ? ` - ${line.resource_name}` : ""}
+                                  </strong>
                                   <span>
-                                    {line.quantity} {line.unit_name}
+                                    {line.quantity} {line.unit_name} at ${Number(line.hourly_rate).toFixed(4)}/hr
                                   </span>
-                                </div>
-                                <div className="estimate-breakdown__linePricing">
-                                  <span>${Number(line.hourly_rate).toFixed(4)}/hr</span>
                                   <span>${Number(line.monthly_rate).toFixed(2)}/mo</span>
                                 </div>
+                                <div className="estimate-breakdown__linePricing">
+                                  <span className={line.matched_exactly ? "badge badge--success" : "badge badge--warning"}>
+                                    {line.matched_exactly ? "Exact match" : "Best match"}
+                                  </span>
+                                  {line.match_confidence ? <span>{line.match_confidence}</span> : null}
+                                </div>
+                                {assumptions ? (
+                                  <details className="estimate-breakdown__lineDetails">
+                                    <summary>Pricing details</summary>
+                                    <dl className="estimate-breakdown__detailGrid">
+                                      {asString(assumptions.resolution_source) ? (
+                                        <div>
+                                          <dt>Resolution</dt>
+                                          <dd>{asString(assumptions.resolution_source)}</dd>
+                                        </div>
+                                      ) : null}
+                                      {renderAssumptionValue(assumptions.unit_price) ? (
+                                        <div>
+                                          <dt>Unit price</dt>
+                                          <dd>${Number(assumptions.unit_price).toFixed(6)}</dd>
+                                        </div>
+                                      ) : null}
+                                      {renderAssumptionValue(assumptions.quantity) ? (
+                                        <div>
+                                          <dt>Quantity</dt>
+                                          <dd>{renderAssumptionValue(assumptions.quantity)}</dd>
+                                        </div>
+                                      ) : null}
+                                      {lookupKey ? (
+                                        <>
+                                          {asString(lookupKey.product_name) ? (
+                                            <div>
+                                              <dt>Product</dt>
+                                              <dd>{lookupKey.product_name}</dd>
+                                            </div>
+                                          ) : null}
+                                          {asString(lookupKey.region) ? (
+                                            <div>
+                                              <dt>Region</dt>
+                                              <dd>{lookupKey.region}</dd>
+                                            </div>
+                                          ) : null}
+                                          {asString(lookupKey.tier) ? (
+                                            <div>
+                                              <dt>Tier</dt>
+                                              <dd>{lookupKey.tier}</dd>
+                                            </div>
+                                          ) : null}
+                                        </>
+                                      ) : null}
+                                      {asString(assumptions.deployment_model) ? (
+                                        <div>
+                                          <dt>Deployment</dt>
+                                          <dd>{asString(assumptions.deployment_model)}</dd>
+                                        </div>
+                                      ) : null}
+                                      {asString(assumptions.compute_generation) ? (
+                                        <div>
+                                          <dt>Generation</dt>
+                                          <dd>{asString(assumptions.compute_generation)}</dd>
+                                        </div>
+                                      ) : null}
+                                      {asString(assumptions.tier) ? (
+                                        <div>
+                                          <dt>Tier</dt>
+                                          <dd>{asString(assumptions.tier)}</dd>
+                                        </div>
+                                      ) : null}
+                                    </dl>
+                                  </details>
+                                ) : null}
+                                {candidateRecords.length > 1 ? (
+                                  <details className="estimate-breakdown__lineDetails estimate-breakdown__lineDetails--records">
+                                    <summary>All returned Azure records</summary>
+                                    <div className="estimate-breakdown__recordToolbar" role="toolbar" aria-label="Candidate record sort order">
+                                      <span>Order by</span>
+                                      <button
+                                        type="button"
+                                        className={[
+                                          "estimate-breakdown__sortButton",
+                                          candidateRecordSort === "api" ? "estimate-breakdown__sortButton--active" : ""
+                                        ].join(" ")}
+                                        onClick={() => setCandidateRecordSort("api")}
+                                      >
+                                        API order
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={[
+                                          "estimate-breakdown__sortButton",
+                                          candidateRecordSort === "price-asc" ? "estimate-breakdown__sortButton--active" : ""
+                                        ].join(" ")}
+                                        onClick={() => setCandidateRecordSort("price-asc")}
+                                      >
+                                        Price low to high
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={[
+                                          "estimate-breakdown__sortButton",
+                                          candidateRecordSort === "price-desc" ? "estimate-breakdown__sortButton--active" : ""
+                                        ].join(" ")}
+                                        onClick={() => setCandidateRecordSort("price-desc")}
+                                      >
+                                        Price high to low
+                                      </button>
+                                    </div>
+                                    <div className="estimate-breakdown__recordTableWrap">
+                                      <table className="estimate-breakdown__recordTable">
+                                        <thead>
+                                          <tr>
+                                            <th>Record</th>
+                                            <th>Product</th>
+                                            <th>Meter</th>
+                                            <th>SKU</th>
+                                            <th>Region</th>
+                                            <th>Unit</th>
+                                            <th>Type</th>
+                                            <th className="estimate-breakdown__recordTablePrice">Price</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {candidateRecords.map((record, recordIndex) => (
+                                            <tr
+                                              key={`${line.id}-record-${recordIndex}`}
+                                              className={recordIndex === 0 ? "estimate-breakdown__recordRow--selected" : ""}
+                                            >
+                                              <td>
+                                                <span className="estimate-breakdown__recordLabel">
+                                                  Record {recordIndex + 1}
+                                                </span>
+                                                {recordIndex === 0 ? (
+                                                  <span className="badge badge--success estimate-breakdown__recordBadge">
+                                                    Selected
+                                                  </span>
+                                                ) : null}
+                                              </td>
+                                              <td>{asString(record.productName) ? (record.productName as string) : "N/A"}</td>
+                                              <td>{asString(record.meterName) ? (record.meterName as string) : "N/A"}</td>
+                                              <td>{asString(record.skuName) ? (record.skuName as string) : "N/A"}</td>
+                                              <td>{asString(record.armRegionName) ? (record.armRegionName as string) : "N/A"}</td>
+                                              <td>{asString(record.unitOfMeasure) ? (record.unitOfMeasure as string) : "N/A"}</td>
+                                              <td>{asString(record.type) ? (record.type as string) : "N/A"}</td>
+                                              <td className="estimate-breakdown__recordTablePrice">
+                                                {asString(record.retailPrice) ? `$${Number(record.retailPrice).toFixed(6)}` : "N/A"}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </details>
+                                ) : null}
                               </article>
+                                );
+                              })()
                             ))}
                           </div>
                         </section>

@@ -537,6 +537,9 @@ class CostPricingService:
             db=db,
             lookup_key_id=lookup.id
         )
+        candidate_records: list[dict[str, Any]] = []
+        api_url = "https://prices.azure.com/api/retail/prices"
+        request_params: dict[str, Any] = {}
 
         if snapshot is None or price_cache_service.should_refresh(lookup):
             if resolved.intent.resource_type.lower().startswith("virtual machine"):
@@ -559,6 +562,7 @@ class CostPricingService:
                         "candidate_count": len(items)
                     }
                 )
+            candidate_records = items
             snapshot = price_cache_service.refresh_lookup_key(
                 db=db,
                 lookup_key=lookup,
@@ -566,6 +570,8 @@ class CostPricingService:
                 raw_payload=best_item,
                 request_params=request_params
             )
+        elif snapshot.raw_payload:
+            candidate_records = [snapshot.raw_payload]
 
         unit_price = float(snapshot.unit_price or snapshot.retail_price or 0)
         hourly_rate = quantity * unit_price
@@ -588,7 +594,9 @@ class CostPricingService:
                 **resolved.assumptions,
                 "lookup_key": resolved.lookup_spec,
                 "unit_price": unit_price,
-                "quantity": quantity
+                "quantity": quantity,
+                "candidate_count": len(candidate_records),
+                "candidate_records": candidate_records
             }
         )
 
