@@ -716,19 +716,19 @@ export function AzureResourceCostsPage() {
                                           {asString(lookupKey.product_name) ? (
                                             <div>
                                               <dt>Product</dt>
-                                              <dd>{lookupKey.product_name}</dd>
+                                              <dd>{asString(lookupKey.product_name)}</dd>
                                             </div>
                                           ) : null}
                                           {asString(lookupKey.region) ? (
                                             <div>
                                               <dt>Region</dt>
-                                              <dd>{lookupKey.region}</dd>
+                                              <dd>{asString(lookupKey.region)}</dd>
                                             </div>
                                           ) : null}
                                           {asString(lookupKey.tier) ? (
                                             <div>
                                               <dt>Tier</dt>
-                                              <dd>{lookupKey.tier}</dd>
+                                              <dd>{asString(lookupKey.tier)}</dd>
                                             </div>
                                           ) : null}
                                         </>
