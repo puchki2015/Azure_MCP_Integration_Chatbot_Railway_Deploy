@@ -59,7 +59,7 @@ const MYSQL_CLARIFICATION_META: Record<string, ClarificationFieldMeta> = {
     title: "MySQL compute generation",
     description: "Choose the compute generation that matches the user request.",
     placeholder: "Select compute generation",
-    optionOrder: ["Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
+    optionOrder: ["", "Gen4", "Gen5", "Dsv3", "Dsv5", "Dsv6", "Dasv5", "Dasv6", "Ddsv5", "Ddsv6", "Esv6", "Easv6", "Eadsv5", "Eadsv6", "Edsv5", "Edsv6"]
   }
 };
 
@@ -100,12 +100,13 @@ function sortClarificationItems(items: CostAnalysis["clarification_items"]) {
 
 function sortSuggestedValues(fieldName: string, suggestedValues: string[]) {
   const meta = getClarificationMeta(fieldName);
+  const nonEmptyValues = suggestedValues.filter((value) => value.trim().length > 0);
   if (!meta.optionOrder?.length) {
-    return suggestedValues;
+    return nonEmptyValues;
   }
 
   const order = new Map(meta.optionOrder.map((value, index) => [value.toLowerCase(), index]));
-  return [...suggestedValues].sort((left, right) => {
+  return [...nonEmptyValues].sort((left, right) => {
     const leftIndex = order.get(left.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
     const rightIndex = order.get(right.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
     if (leftIndex !== rightIndex) {
@@ -113,6 +114,10 @@ function sortSuggestedValues(fieldName: string, suggestedValues: string[]) {
     }
     return left.localeCompare(right);
   });
+}
+
+function shouldRenderBlankOption(fieldName: string) {
+  return fieldName === "compute_generation";
 }
 
 function groupEstimateLines(lines: CostEstimate["lines"]): EstimateLineGroup[] {
@@ -604,6 +609,16 @@ export function AzureResourceCostsPage() {
                           onChange={(event) => handleSelectionChange(item.field_name, event.target.value)}
                         >
                           <option value="">{meta.placeholder}</option>
+                          {shouldRenderBlankOption(item.field_name) ? (
+                            <option value="__separator__" disabled>
+                              ──────────
+                            </option>
+                          ) : null}
+                          {shouldRenderBlankOption(item.field_name) ? (
+                            <option value="__blank__" disabled>
+                              (blank)
+                            </option>
+                          ) : null}
                           {suggestedValues.map((value) => (
                             <option key={value} value={value}>
                               {value}

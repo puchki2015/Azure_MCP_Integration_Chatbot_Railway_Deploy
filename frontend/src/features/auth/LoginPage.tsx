@@ -235,25 +235,6 @@ export function LoginPage() {
         </div>
       </section>
 
-      <div className="landing-stats-strip landing-reveal">
-        <div className="landing-stat">
-          <div className="landing-stat__num">200+</div>
-          <div className="landing-stat__label">Azure resource types supported</div>
-        </div>
-        <div className="landing-stat">
-          <div className="landing-stat__num">&lt;2s</div>
-          <div className="landing-stat__label">Avg. query response time</div>
-        </div>
-        <div className="landing-stat">
-          <div className="landing-stat__num">50k+</div>
-          <div className="landing-stat__label">Teams using AzureOPS AI</div>
-        </div>
-        <div className="landing-stat">
-          <div className="landing-stat__num">99.9%</div>
-          <div className="landing-stat__label">Platform uptime SLA</div>
-        </div>
-      </div>
-
       <section className="landing-section" id="features">
         <div className="landing-reveal">
           <div className="landing-eyebrow">// Capabilities</div>
@@ -404,11 +385,10 @@ export function LoginPage() {
       <section className="landing-cta landing-reveal" id="pricing">
         <div className="landing-cta__card">
           <h2>Start talking to your cloud today</h2>
-          <p>Free for up to 2 subscriptions - No credit card required - SOC 2 Type II certified</p>
+          <p>Free for up to 2 subscriptions - No credit card required</p>
           <div className="landing-cta__row">
             <input className="landing-cta__email" type="email" placeholder="you@company.com" />
           </div>
-          <p className="landing-cta__footnote">Trusted by engineering teams at Contoso, Fabrikam, Northwind & 50,000+ others</p>
         </div>
       </section>
 
