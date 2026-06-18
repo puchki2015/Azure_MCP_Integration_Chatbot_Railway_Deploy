@@ -856,6 +856,96 @@ button, input { font: inherit; }
   gap: 10px;
 }
 
+.estimate-breakdown {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.estimate-breakdown__group {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  display: grid;
+  gap: 12px;
+}
+
+.estimate-breakdown__groupHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.estimate-breakdown__groupHeader h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-family: Sora, Inter, sans-serif;
+}
+
+.estimate-breakdown__groupHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.estimate-breakdown__groupTotals {
+  text-align: right;
+  display: grid;
+  gap: 2px;
+}
+
+.estimate-breakdown__groupTotals strong {
+  font-size: 1rem;
+}
+
+.estimate-breakdown__groupTotals span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.estimate-breakdown__lines {
+  display: grid;
+  gap: 10px;
+}
+
+.estimate-breakdown__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(245, 247, 251, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.estimate-breakdown__lineMain {
+  display: grid;
+  gap: 3px;
+}
+
+.estimate-breakdown__lineMain strong {
+  font-size: 0.95rem;
+}
+
+.estimate-breakdown__lineMain span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.estimate-breakdown__linePricing {
+  text-align: right;
+  display: grid;
+  gap: 2px;
+}
+
+.estimate-breakdown__linePricing span {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
 .cost-payload {
   margin-top: 16px;
   display: grid;

@@ -20,6 +20,13 @@ const catalogServices: Array<{ label: string; value: PriceCatalogService }> = [
 
 type PagerItem = number | "ellipsis";
 
+type EstimateLineGroup = {
+  resource_type: string;
+  lines: CostEstimate["lines"];
+  subtotal_hourly: number;
+  subtotal_monthly: number;
+};
+
 type ClarificationFieldMeta = {
   title: string;
   description: string;
@@ -104,6 +111,33 @@ function sortSuggestedValues(fieldName: string, suggestedValues: string[]) {
     }
     return left.localeCompare(right);
   });
+}
+
+function groupEstimateLines(lines: CostEstimate["lines"]): EstimateLineGroup[] {
+  const groups = new Map<string, EstimateLineGroup>();
+
+  for (const line of lines) {
+    const key = line.resource_type;
+    const hourly = Number(line.hourly_rate ?? 0);
+    const monthly = Number(line.monthly_rate ?? 0);
+    const current = groups.get(key);
+
+    if (!current) {
+      groups.set(key, {
+        resource_type: line.resource_type,
+        lines: [line],
+        subtotal_hourly: hourly,
+        subtotal_monthly: monthly
+      });
+      continue;
+    }
+
+    current.lines.push(line);
+    current.subtotal_hourly += hourly;
+    current.subtotal_monthly += monthly;
+  }
+
+  return Array.from(groups.values());
 }
 
 function buildAnalysisPayload(analysis: CostAnalysis) {
@@ -307,6 +341,7 @@ export function AzureResourceCostsPage() {
   const mysqlClarificationFields = new Set(["region", "deployment_model", "tier", "compute_generation"]);
   const isMysqlClarificationFlow =
     clarificationItems.length > 0 && clarificationItems.every((item) => mysqlClarificationFields.has(item.field_name));
+  const groupedEstimateLines = activeEstimate ? groupEstimateLines(activeEstimate.lines) : [];
 
   if (loading) {
     return (
@@ -563,14 +598,39 @@ export function AzureResourceCostsPage() {
                       Total: ${Number(activeEstimate.total_monthly ?? 0).toFixed(2)} / month, $
                       {Number(activeEstimate.total_hourly ?? 0).toFixed(4)} / hour
                     </p>
-                    <ul className="cost-page__list">
-                      {activeEstimate.lines.map((line) => (
-                        <li key={line.id}>
-                          {line.resource_type} {line.resource_name ? `(${line.resource_name})` : ""}: {line.quantity}{" "}
-                          {line.unit_name} at ${Number(line.hourly_rate).toFixed(4)}/hr
-                        </li>
+                    <div className="estimate-breakdown">
+                      {groupedEstimateLines.map((group) => (
+                        <section key={group.resource_type} className="estimate-breakdown__group">
+                          <div className="estimate-breakdown__groupHeader">
+                            <div>
+                              <h3>{group.resource_type}</h3>
+                              <p>{group.lines.length} line{group.lines.length === 1 ? "" : "s"} priced together</p>
+                            </div>
+                            <div className="estimate-breakdown__groupTotals">
+                              <strong>${group.subtotal_monthly.toFixed(2)} / month</strong>
+                              <span>${group.subtotal_hourly.toFixed(4)} / hour</span>
+                            </div>
+                          </div>
+
+                          <div className="estimate-breakdown__lines">
+                            {group.lines.map((line) => (
+                              <article key={line.id} className="estimate-breakdown__line">
+                                <div className="estimate-breakdown__lineMain">
+                                  <strong>{line.resource_name ?? line.resource_type}</strong>
+                                  <span>
+                                    {line.quantity} {line.unit_name}
+                                  </span>
+                                </div>
+                                <div className="estimate-breakdown__linePricing">
+                                  <span>${Number(line.hourly_rate).toFixed(4)}/hr</span>
+                                  <span>${Number(line.monthly_rate).toFixed(2)}/mo</span>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        </section>
                       ))}
-                    </ul>
+                    </div>
                     <small className="session-summary-card__meta">
                       Saved {formatDate(activeEstimate.created_at)} · status {activeEstimate.status}
                     </small>
