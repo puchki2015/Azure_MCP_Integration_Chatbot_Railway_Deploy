@@ -288,10 +288,7 @@ class CostPricingService:
         if deployment_model:
             parts.append(deployment_model)
         if tier:
-            if tier == "Storage":
-                parts.append("Basic - Storage")
-            else:
-                parts.append(tier)
+            parts.append(tier)
         if compute_generation:
             if compute_generation in {"Gen4", "Gen5"}:
                 parts.append(f"- Compute {compute_generation}")
@@ -301,7 +298,7 @@ class CostPricingService:
 
     def _mysql_meter_name(self, tier: str | None, compute_generation: str | None) -> str | None:
         if tier == "Storage":
-            return "Basic - Storage"
+            return "Storage"
 
         parts = [part for part in [tier, f"Compute {compute_generation}" if compute_generation else None] if part]
         return " - ".join(parts) if parts else None

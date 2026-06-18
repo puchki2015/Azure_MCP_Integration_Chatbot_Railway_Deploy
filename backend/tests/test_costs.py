@@ -328,8 +328,8 @@ class CostCacheTests(unittest.TestCase):
 
         best_item = {
             "id": "mysql-row-storage-001",
-            "productName": "Azure Database for MySQL Single Server Basic - Storage",
-            "meterName": "Basic - Storage",
+            "productName": "Azure Database for MySQL Single Server Storage",
+            "meterName": "Storage",
             "armRegionName": "westus",
             "currencyCode": "USD",
             "unitOfMeasure": "1 GB/Month",
@@ -356,7 +356,7 @@ class CostCacheTests(unittest.TestCase):
         mysql_query = mocked_fetch.call_args[0][0]
         self.assertEqual(
             mysql_query.product_name,
-            "Azure Database for MySQL Single Server Basic - Storage"
+            "Azure Database for MySQL Single Server Storage"
         )
         self.assertIsNone(mysql_query.meter_name)
         self.assertEqual(estimate.lines[0].unit_name, "GB/Month")
