@@ -120,6 +120,10 @@ function shouldRenderBlankOption(fieldName: string) {
   return fieldName === "compute_generation";
 }
 
+function normalizeClarificationSelection(value: string) {
+  return value === "__blank__" ? "" : value;
+}
+
 function groupEstimateLines(lines: CostEstimate["lines"]): EstimateLineGroup[] {
   const groups = new Map<string, EstimateLineGroup>();
 
@@ -380,7 +384,7 @@ export function AzureResourceCostsPage() {
   const handleSelectionChange = (fieldName: string, value: string) => {
     setSelections((current) => ({
       ...current,
-      [fieldName]: value
+      [fieldName]: normalizeClarificationSelection(value)
     }));
   };
 
@@ -615,7 +619,7 @@ export function AzureResourceCostsPage() {
                             </option>
                           ) : null}
                           {shouldRenderBlankOption(item.field_name) ? (
-                            <option value="__blank__" disabled>
+                            <option value="__blank__">
                               (blank)
                             </option>
                           ) : null}
